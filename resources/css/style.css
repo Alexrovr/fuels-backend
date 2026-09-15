@@ -136,14 +136,34 @@ body {
             rgba(33, 33, 33, 0.94) 100%);
 }
 
-/* Вся информация и кнопки располагаются прямо поверх видео */
+/* Вся информация и кнопки располагаются прямо поверх видео:
+   текстовое описание снизу слева, параметры и иконки справа */
 .heat-reel__overlay {
     position: absolute;
     right: 0;
     bottom: 0;
     left: 0;
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 10px;
     padding: 14px 14px 18px;
     color: var(--heat-white);
+}
+
+.heat-reel__bottom {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.heat-reel__side {
+    display: flex;
+    flex: 0 0 auto;
+    flex-direction: column;
+    align-items: center;
+    gap: 14px;
+    width: 82px;
+    min-width: 0;
 }
 
 .heat-reel__heading {
@@ -218,30 +238,39 @@ body {
     display: inline;
 }
 
-/* Пара полей по предметной области поверх видео */
+/* Пара полей по предметной области — вертикальная колонка справа поверх видео */
 .heat-facts {
     display: flex;
     gap: 8px;
-    margin: 0 0 10px;
+    margin: 0;
+}
+
+.heat-facts--side {
+    flex-direction: column;
+    width: 100%;
 }
 
 .heat-facts__item {
     flex: 1;
-    padding: 7px 9px;
+    min-width: 0;
+    padding: 6px 5px;
     border-left: 3px solid var(--heat-accent);
     background: rgba(255, 255, 255, 0.10);
+    text-align: center;
 }
 
 .heat-facts__key {
     margin: 0 0 3px;
-    font-size: 10px;
+    overflow-wrap: break-word;
+    word-break: break-word;
+    font-size: 9px;
     color: #CFCFCF;
     text-transform: uppercase;
 }
 
 .heat-facts__value {
     margin: 0;
-    font-size: 15px;
+    font-size: 13px;
     font-weight: bold;
     color: var(--heat-white);
 }
@@ -253,19 +282,13 @@ body {
 }
 
 .heat-reel__calc {
-    margin: 0 0 12px;
+    margin: 0;
     font-size: 11px;
     color: #CFCFCF;
 }
 
 .heat-reel__calc b {
     color: var(--heat-accent);
-}
-
-.heat-reel__actions {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
 }
 
 /* --- Лайки --------------------------------------------------------------- */
@@ -289,10 +312,23 @@ body {
     font-size: 12px;
 }
 
+.heat-like--side {
+    flex-direction: column;
+    gap: 2px;
+    text-align: center;
+}
+
+.heat-like--side .heat-like__icon {
+    font-size: 24px;
+}
+
 /* --- Кнопки -------------------------------------------------------------- */
 
 .heat-button {
-    display: inline-block;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 38px;
     padding: 9px 18px;
     border: 1px solid var(--heat-accent);
     background: var(--heat-accent);
@@ -303,6 +339,7 @@ body {
     text-decoration: none;
     cursor: pointer;
     transition: background 0.15s, color 0.15s, border-color 0.15s;
+    white-space: nowrap;
 }
 
 .heat-button:hover {
@@ -310,20 +347,17 @@ body {
     color: var(--heat-accent);
 }
 
-.heat-button--wide {
-    width: 100%;
-    padding: 12px;
-}
-
-.heat-button--wide[disabled] {
-    border-color: #CCCCCC;
-    background: #CCCCCC;
-    color: var(--heat-white);
-    cursor: not-allowed;
-}
-
 .heat-button--filter {
     padding: 8px 14px;
+}
+
+.heat-button--side {
+    width: 100%;
+    padding: 8px 6px;
+    font-size: 11px;
+    line-height: 1.15;
+    text-align: center;
+    white-space: normal;
 }
 
 /* --- Фильтр по теплоте сгорания ------------------------------------------ */
@@ -346,22 +380,61 @@ body {
 
 .heat-filter__row {
     display: flex;
+    align-items: center;
+    flex-wrap: wrap;
     gap: 8px;
 }
 
-.heat-filter__input {
-    flex: 1;
+.heat-filter__slider-wrap {
+    display: flex;
+    flex: 1 1 180px;
+    flex-direction: column;
     min-width: 0;
-    padding: 8px 10px;
-    border: 1px solid #CCCCCC;
-    background: var(--heat-white);
-    font: 13px Arial, sans-serif;
-    color: var(--heat-dark);
+    gap: 4px;
 }
 
-.heat-filter__input:focus {
-    border-color: var(--heat-accent);
-    outline: none;
+.heat-filter__slider {
+    width: 100%;
+    min-width: 0;
+    accent-color: var(--heat-accent);
+}
+
+.heat-filter__ticks {
+    position: relative;
+    height: 16px;
+    margin-top: 2px;
+    font-size: 8.5px;
+    line-height: 1.2;
+    letter-spacing: -0.02em;
+    color: var(--heat-muted);
+}
+
+.heat-filter__ticks span {
+    position: absolute;
+    left: var(--pos);
+    transform: translateX(-50%);
+    white-space: nowrap;
+}
+
+.heat-filter__ticks span:first-child {
+    left: 0;
+    transform: none;
+    text-align: left;
+}
+
+.heat-filter__ticks span:last-child {
+    left: 100%;
+    transform: translateX(-100%);
+    text-align: right;
+}
+
+.heat-filter__value {
+    flex: 0 0 auto;
+    min-width: 64px;
+    font-size: 12px;
+    font-weight: bold;
+    color: var(--heat-value);
+    text-align: right;
 }
 
 .heat-filter__error {

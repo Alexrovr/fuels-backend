@@ -19,40 +19,43 @@
             <div class="heat-reel__shade"></div>
 
             <div class="heat-reel__overlay">
-                <div class="heat-reel__heading">
-                    <h1 class="heat-reel__name">{{ .FuelName }}</h1>
-                    <span class="heat-reel__formula">{{ .ChemicalFormula }}</span>
+                <div class="heat-reel__bottom">
+                    <div class="heat-reel__heading">
+                        <h1 class="heat-reel__name">{{ .FuelName }}</h1>
+                        <span class="heat-reel__formula">{{ .ChemicalFormula }}</span>
+                    </div>
+
+                    <input class="heat-note__toggle" type="checkbox" id="heat-note-toggle">
+                    <p class="heat-note__text">{{ .CombustionNote }}</p>
+                    <label class="heat-note__label" for="heat-note-toggle">
+                        <span class="heat-note__more">Больше</span>
+                        <span class="heat-note__less">Меньше</span>
+                    </label>
+
+                    <p class="heat-reel__calc">
+                        Полное сгорание 10 м&sup3; при н.у.:
+                        <b>{{ printf "%.0f" (heatForVolume .HeatOfCombustionKJ 10.0) }} кДж</b>
+                    </p>
                 </div>
 
-                <input class="heat-note__toggle" type="checkbox" id="heat-note-toggle">
-                <p class="heat-note__text">{{ .CombustionNote }}</p>
-                <label class="heat-note__label" for="heat-note-toggle">
-                    <span class="heat-note__more">Больше</span>
-                    <span class="heat-note__less">Меньше</span>
-                </label>
+                <div class="heat-reel__side">
+                    <dl class="heat-facts heat-facts--side">
+                        <div class="heat-facts__item">
+                            <dt class="heat-facts__key">Теплота сгорания</dt>
+                            <dd class="heat-facts__value">{{ .HeatOfCombustionKJ }} <span class="heat-facts__unit">кДж/м&sup3;</span></dd>
+                        </div>
+                        <div class="heat-facts__item">
+                            <dt class="heat-facts__key">Воспламенение</dt>
+                            <dd class="heat-facts__value">{{ .IgnitionTempC }} <span class="heat-facts__unit">&deg;C</span></dd>
+                        </div>
+                    </dl>
 
-                <dl class="heat-facts">
-                    <div class="heat-facts__item">
-                        <dt class="heat-facts__key">Теплота сгорания при н.у.</dt>
-                        <dd class="heat-facts__value">{{ .HeatOfCombustionKJ }} <span class="heat-facts__unit">кДж/м&sup3;</span></dd>
-                    </div>
-                    <div class="heat-facts__item">
-                        <dt class="heat-facts__key">Температура воспламенения</dt>
-                        <dd class="heat-facts__value">{{ .IgnitionTempC }} <span class="heat-facts__unit">&deg;C</span></dd>
-                    </div>
-                </dl>
-
-                <p class="heat-reel__calc">
-                    Полное сгорание 10 м&sup3; при н.у.:
-                    <b>{{ printf "%.0f" (heatForVolume .HeatOfCombustionKJ 10.0) }} кДж</b>
-                </p>
-
-                <div class="heat-reel__actions">
-                    <span class="heat-like" title="Количество лайков карточки">
+                    <span class="heat-like heat-like--side" title="Количество лайков карточки">
                         <span class="heat-like__icon">&#10084;</span>
                         <span class="heat-like__count">{{ .LikesCount }}</span>
                     </span>
-                    <a class="heat-button heat-button--next" href="/fuel_feed/{{ .FuelID }}?next=true">Следующий</a>
+
+                    <a class="heat-button heat-button--next heat-button--side" href="/fuel_feed/{{ .FuelID }}?next=true">Следующий</a>
                 </div>
             </div>
         </section>

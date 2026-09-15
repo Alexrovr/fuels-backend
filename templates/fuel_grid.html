@@ -11,13 +11,24 @@
         <form class="heat-filter" method="get" action="/fuel_grid">
             <label class="heat-filter__label" for="min_heat">Теплота сгорания не менее, кДж/м&sup3;</label>
             <div class="heat-filter__row">
-                <input class="heat-filter__input"
-                       type="text"
-                       inputmode="numeric"
-                       id="min_heat"
-                       name="min_heat"
-                       placeholder="например, 35000"
-                       value="{{ .MinHeatFilter }}">
+                <div class="heat-filter__slider-wrap">
+                    <input class="heat-filter__slider"
+                           type="range"
+                           id="min_heat"
+                           name="min_heat"
+                           min="0"
+                           max="110000"
+                           step="1000"
+                           value="{{ if .MinHeatFilter }}{{ .MinHeatFilter }}{{ else }}0{{ end }}">
+                    <div class="heat-filter__ticks" aria-hidden="true">
+                        <span style="--pos: 0%;">0</span>
+                        <span style="--pos: 25%;">27 500</span>
+                        <span style="--pos: 50%;">55 000</span>
+                        <span style="--pos: 75%;">82 500</span>
+                        <span style="--pos: 100%;">110 000</span>
+                    </div>
+                </div>
+                <span class="heat-filter__value">{{ if .MinHeatFilter }}{{ .MinHeatFilter }}{{ else }}0{{ end }} кДж/м&sup3;</span>
                 <button class="heat-button heat-button--filter" type="submit">Найти</button>
             </div>
             {{ if .FilterErrorMsg }}
