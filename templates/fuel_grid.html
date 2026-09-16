@@ -28,7 +28,9 @@
                         <span style="--pos: 100%;">110 000</span>
                     </div>
                 </div>
-                <span class="heat-filter__value">{{ if .MinHeatFilter }}{{ .MinHeatFilter }}{{ else }}0{{ end }} кДж/м&sup3;</span>
+            </div>
+            <div class="heat-filter__actions">
+                <span class="heat-filter__value">от {{ if .MinHeatFilter }}{{ .MinHeatFilter }}{{ else }}0{{ end }} кДж/м&sup3;</span>
                 <button class="heat-button heat-button--filter" type="submit">Найти</button>
             </div>
             {{ if .FilterErrorMsg }}

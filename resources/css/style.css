@@ -428,13 +428,18 @@ body {
     text-align: right;
 }
 
+.heat-filter__actions {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-top: 6px;
+}
+
 .heat-filter__value {
-    flex: 0 0 auto;
-    min-width: 64px;
     font-size: 12px;
     font-weight: bold;
     color: var(--heat-value);
-    text-align: right;
 }
 
 .heat-filter__error {
