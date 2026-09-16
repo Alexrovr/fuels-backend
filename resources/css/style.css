@@ -181,14 +181,6 @@ body {
     text-transform: uppercase;
 }
 
-.heat-reel__formula {
-    padding: 2px 6px;
-    background: var(--heat-accent);
-    color: var(--heat-white);
-    font-size: 11px;
-    font-weight: bold;
-}
-
 /* Кнопка «Больше/Меньше» на чистом CSS, без JavaScript */
 .heat-note__toggle {
     position: absolute;
@@ -263,6 +255,7 @@ body {
     margin: 0 0 3px;
     overflow-wrap: break-word;
     word-break: break-word;
+    hyphens: auto;
     font-size: 9px;
     color: #CFCFCF;
     text-transform: uppercase;
@@ -279,6 +272,12 @@ body {
     font-size: 11px;
     font-weight: normal;
     color: #CFCFCF;
+    white-space: nowrap;
+}
+
+/* В правой колонке единица измерения всегда уходит на отдельную строку */
+.heat-facts--side .heat-facts__unit {
+    display: block;
 }
 
 .heat-reel__calc {
@@ -349,6 +348,27 @@ body {
 
 .heat-button--filter {
     padding: 8px 14px;
+}
+
+.heat-button--wide {
+    width: 100%;
+    padding: 12px;
+}
+
+/* Логическое удаление карточки прямо из плитки */
+.heat-button--delete {
+    width: 100%;
+    padding: 7px;
+    border-color: var(--heat-border);
+    background: var(--heat-white);
+    color: var(--heat-muted);
+    font-size: 10px;
+}
+
+.heat-button--delete:hover {
+    border-color: var(--heat-accent);
+    background: var(--heat-accent);
+    color: var(--heat-white);
 }
 
 .heat-button--side {
@@ -428,13 +448,18 @@ body {
     text-align: right;
 }
 
+.heat-filter__actions {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-top: 6px;
+}
+
 .heat-filter__value {
-    flex: 0 0 auto;
-    min-width: 64px;
     font-size: 12px;
     font-weight: bold;
     color: var(--heat-value);
-    text-align: right;
 }
 
 .heat-filter__error {
@@ -456,6 +481,12 @@ body {
 
 .heat-grid__cell {
     display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.heat-card__delete {
+    margin: 0;
 }
 
 .heat-card {
@@ -499,12 +530,6 @@ body {
     color: var(--heat-accent);
 }
 
-.heat-card__formula {
-    margin: 0 0 6px;
-    font-size: 11px;
-    color: var(--heat-muted);
-}
-
 .heat-card__heat {
     margin: 0 0 6px;
     font-size: 14px;
@@ -534,6 +559,20 @@ body {
     font-size: 11px;
     font-weight: bold;
     text-transform: uppercase;
+}
+
+.heat-draft__status--new {
+    background: var(--heat-dark);
+}
+
+.heat-form__error {
+    margin: 0 0 12px;
+    padding: 8px 10px;
+    border-left: 3px solid var(--heat-value);
+    background: #FDECEA;
+    color: var(--heat-value);
+    font-size: 12px;
+    font-weight: bold;
 }
 
 .heat-form {

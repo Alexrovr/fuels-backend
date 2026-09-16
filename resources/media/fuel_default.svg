@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 400" width="600" height="400" role="img"
+     aria-label="Изображение топлива не загружено">
+    <rect width="600" height="400" fill="#212121"/>
+    <rect x="8" y="8" width="584" height="384" fill="none" stroke="#3A3A3A" stroke-width="2"/>
+
+    <g transform="translate(300 178)">
+        <path d="M0 -92 C 34 -46 62 -26 62 14 C 62 52 34 78 0 78 C -34 78 -62 52 -62 14 C -62 -24 -32 -40 -18 -70 C -10 -44 4 -40 10 -56 C 16 -70 8 -80 0 -92 Z"
+              fill="#FD2B06"/>
+        <path d="M0 -30 C 16 -6 26 4 26 22 C 26 40 14 52 0 52 C -14 52 -26 40 -26 22 C -26 4 -12 -8 0 -30 Z"
+              fill="#FFD2C6"/>
+    </g>
+
+    <text x="300" y="322" text-anchor="middle"
+          font-family="Arial, Helvetica, sans-serif" font-size="26" font-weight="bold"
+          letter-spacing="2" fill="#FFFFFF">ИЗОБРАЖЕНИЕ НЕ ЗАГРУЖЕНО</text>
+    <text x="300" y="352" text-anchor="middle"
+          font-family="Arial, Helvetica, sans-serif" font-size="18"
+          letter-spacing="1" fill="#9A9A9A">карточка использует медиа по умолчанию</text>
+</svg>

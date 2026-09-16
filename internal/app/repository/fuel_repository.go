@@ -2,7 +2,13 @@ package repository
 
 import (
 	"errors"
+	"fmt"
+	"time"
 
+	"gorm.io/driver/postgres"
+	"gorm.io/gorm"
+
+	"heat-backend/internal/app/dsn"
 	"heat-backend/internal/app/models"
 )
 
@@ -10,154 +16,195 @@ var ErrFuelNotFound = errors.New("вид топлива не найден")
 var ErrDraftNotFound = errors.New("черновик карточки топлива не найден")
 
 type FuelRepository struct {
-	fuels []models.Fuel
+	db *gorm.DB
 }
 
-func NewFuelRepository() *FuelRepository {
-	return &FuelRepository{
-		fuels: []models.Fuel{
-			{
-				FuelID:          1,
-				FuelName:        "Метан",
-				ChemicalFormula: "CH4",
-				CombustionNote: "Основной компонент природного газа. Полное сгорание идёт по уравнению " +
-					"CH4 + 2O2 -> CO2 + 2H2O. При нормальных условиях один кубометр метана отдаёт " +
-					"35 800 кДж теплоты, поэтому метан используют как эталон при расчёте тепловой мощности " +
-					"бытовых котлов и промышленных горелок. Горит спокойным голубым пламенем без копоти, " +
-					"что говорит о полном окислении углерода до диоксида.",
-				HeatOfCombustionKJ: 35800,
-				IgnitionTempC:      537,
-				FlameTempC:         1957,
-				AirDemandM3:        9.52,
-				ImageKey:           "metan.jpg",
-				VideoKey:           "methane.mp4",
-				FuelStatus:         models.FuelStatusPublished,
-				LikedByUserIDs:     []int{1, 2, 3, 5, 8, 13, 21},
-			},
-			{
-				FuelID:          2,
-				FuelName:        "Пропан-бутан",
-				ChemicalFormula: "C3H8 + C4H10",
-				CombustionNote: "Сжиженный углеводородный газ, смесь пропана и бутана в соотношении 50/50. " +
-					"Реакция горения пропана: C3H8 + 5O2 -> 3CO2 + 4H2O. Кубометр смеси при н.у. выделяет " +
-					"около 108 000 кДж — втрое больше метана, поэтому баллонный газ применяют там, где " +
-					"нужна высокая тепловая мощность при малом объёме хранения. Требует втрое большего " +
-					"притока воздуха, иначе горение становится неполным и появляется сажа.",
-				HeatOfCombustionKJ: 108000,
-				IgnitionTempC:      470,
-				FlameTempC:         1970,
-				AirDemandM3:        27.37,
-				ImageKey:           "propan-bytan.jpg",
-				VideoKey:           "propane_butane.mp4",
-				FuelStatus:         models.FuelStatusPublished,
-				LikedByUserIDs:     []int{2, 4, 7, 9, 11, 14, 16, 19, 23},
-			},
-			{
-				FuelID:          3,
-				FuelName:        "Ацетилен",
-				ChemicalFormula: "C2H2",
-				CombustionNote: "Топливо газовой сварки и резки металлов. Полное сгорание: " +
-					"2C2H2 + 5O2 -> 4CO2 + 2H2O. Кубометр ацетилена при н.у. даёт 56 000 кДж, но " +
-					"главное его достоинство не в теплоте, а в температуре пламени: в смеси с кислородом " +
-					"оно достигает 3150 °C — выше, чем у любого другого промышленного газа. " +
-					"Самая низкая температура воспламенения в подборке, всего 335 °C.",
-				HeatOfCombustionKJ: 56000,
-				IgnitionTempC:      335,
-				FlameTempC:         3150,
-				AirDemandM3:        11.91,
-				ImageKey:           "acetilen.png",
-				VideoKey:           "acetylene.mp4",
-				FuelStatus:         models.FuelStatusPublished,
-				LikedByUserIDs:     []int{1, 6, 10, 12, 18},
-			},
-			{
-				FuelID:          4,
-				FuelName:        "Водород",
-				ChemicalFormula: "H2",
-				CombustionNote: "Единственное топливо подборки, при сгорании которого не образуется " +
-					"диоксид углерода: 2H2 + O2 -> 2H2O. Объёмная теплота сгорания самая низкая — " +
-					"10 800 кДж/м³ при н.у., потому что молекула водорода очень лёгкая. " +
-					"Зато на единицу массы водород выделяет 120 000 кДж/кг, вне конкуренции среди " +
-					"всех химических топлив. Пламя почти бесцветное и требует всего 2,38 м³ воздуха.",
-				HeatOfCombustionKJ: 10800,
-				IgnitionTempC:      510,
-				FlameTempC:         2130,
-				AirDemandM3:        2.38,
-				ImageKey:           "vodorod.jpg",
-				VideoKey:           "hydrogen.mp4",
-				FuelStatus:         models.FuelStatusPublished,
-				LikedByUserIDs:     []int{3, 5, 15},
-			},
-			{
-				FuelID:          5,
-				FuelName:        "Метано-водородная смесь",
-				ChemicalFormula: "CH4 + H2",
-				CombustionNote: "Черновик карточки: смесь природного газа с 20 % водорода, которую " +
-					"испытывают как переходное топливо для действующих газовых сетей. Справочные " +
-					"значения ещё уточняются, поэтому карточка не опубликована и доступна только " +
-					"на странице добавления.",
-				HeatOfCombustionKJ: 30800,
-				IgnitionTempC:      520,
-				FlameTempC:         2000,
-				AirDemandM3:        8.09,
-				ImageKey:           "metan.jpg",
-				VideoKey:           "methane.mp4",
-				FuelStatus:         models.FuelStatusDraft,
-				LikedByUserIDs:     []int{},
-			},
-		},
+func NewFuelRepository() (*FuelRepository, error) {
+	db, err := gorm.Open(postgres.Open(dsn.FromEnv()), &gorm.Config{})
+	if err != nil {
+		return nil, fmt.Errorf("подключение к postgres: %w", err)
 	}
+	return &FuelRepository{db: db}, nil
 }
 
-func (r *FuelRepository) GetPublishedFuels(minHeatKJ int) []models.Fuel {
-	result := make([]models.Fuel, 0, len(r.fuels))
-	for _, fuel := range r.fuels {
-		if fuel.FuelStatus != models.FuelStatusPublished {
-			continue
-		}
-		if fuel.HeatOfCombustionKJ < minHeatKJ {
-			continue
-		}
-		result = append(result, fuel)
+func (r *FuelRepository) DB() *gorm.DB {
+	return r.db
+}
+
+
+func (r *FuelRepository) GetPublishedFuels(minHeatKJ int) ([]models.Fuel, error) {
+	var fuels []models.Fuel
+
+	err := r.db.
+		Where("fuel_status = ?", models.FuelStatusPublished).
+		Where("heat_of_combustion_kj >= ?", minHeatKJ).
+		Order("fuel_id").
+		Find(&fuels).Error
+	if err != nil {
+		return nil, err
 	}
-	return result
+	return fuels, nil
 }
 
-func (r *FuelRepository) GetPublishedFuelByID(fuelID int) (models.Fuel, error) {
-	for _, fuel := range r.fuels {
-		if fuel.FuelID == fuelID && fuel.FuelStatus == models.FuelStatusPublished {
-			return fuel, nil
-		}
-	}
-	return models.Fuel{}, ErrFuelNotFound
-}
+func (r *FuelRepository) GetPublishedFuelByID(fuelID uint) (models.Fuel, error) {
+	var fuel models.Fuel
 
-func (r *FuelRepository) GetNextPublishedFuel(fuelID int) (models.Fuel, error) {
-	published := r.GetPublishedFuels(0)
-	if len(published) == 0 {
+	err := r.db.
+		Where("fuel_id = ?", fuelID).
+		Where("fuel_status = ?", models.FuelStatusPublished).
+		First(&fuel).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return models.Fuel{}, ErrFuelNotFound
 	}
-	for i, fuel := range published {
-		if fuel.FuelID == fuelID {
-			return published[(i+1)%len(published)], nil
-		}
+	return fuel, err
+}
+
+// GetNextPublishedFuel отдаёт следующую опубликованную карточку по кругу.
+func (r *FuelRepository) GetNextPublishedFuel(fuelID uint) (models.Fuel, error) {
+	var fuel models.Fuel
+
+	err := r.db.
+		Where("fuel_status = ?", models.FuelStatusPublished).
+		Where("fuel_id > ?", fuelID).
+		Order("fuel_id").
+		First(&fuel).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return r.GetFirstPublishedFuel()
 	}
-	return models.Fuel{}, ErrFuelNotFound
+	return fuel, err
 }
 
 func (r *FuelRepository) GetFirstPublishedFuel() (models.Fuel, error) {
-	published := r.GetPublishedFuels(0)
-	if len(published) == 0 {
+	var fuel models.Fuel
+
+	err := r.db.
+		Where("fuel_status = ?", models.FuelStatusPublished).
+		Order("fuel_id").
+		First(&fuel).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return models.Fuel{}, ErrFuelNotFound
 	}
-	return published[0], nil
+	return fuel, err
 }
 
-func (r *FuelRepository) GetDraftFuel() (models.Fuel, error) {
-	for _, fuel := range r.fuels {
-		if fuel.FuelStatus == models.FuelStatusDraft {
-			return fuel, nil
-		}
+// GetDraftByCreator ищет единственный черновик пользователя.
+func (r *FuelRepository) GetDraftByCreator(userID uint) (models.Fuel, error) {
+	var fuel models.Fuel
+
+	err := r.db.
+		Where("creator_id = ?", userID).
+		Where("fuel_status = ?", models.FuelStatusDraft).
+		First(&fuel).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return models.Fuel{}, ErrDraftNotFound
 	}
-	return models.Fuel{}, ErrDraftNotFound
+	return fuel, err
+}
+
+// --- Лайки (таблица многие-ко-многим) ------------------------------------ //
+
+func (r *FuelRepository) LikesCount(fuelID uint) (int, error) {
+	var count int64
+	err := r.db.Model(&models.FuelLike{}).Where("fuel_id = ?", fuelID).Count(&count).Error
+	return int(count), err
+}
+
+// LikesCountByFuel считает лайки сразу для списка карточек одним запросом.
+func (r *FuelRepository) LikesCountByFuel(fuelIDs []uint) (map[uint]int, error) {
+	counts := make(map[uint]int, len(fuelIDs))
+	if len(fuelIDs) == 0 {
+		return counts, nil
+	}
+
+	var rows []struct {
+		FuelID uint
+		Total  int
+	}
+	err := r.db.Model(&models.FuelLike{}).
+		Select("fuel_id, count(*) as total").
+		Where("fuel_id IN ?", fuelIDs).
+		Group("fuel_id").
+		Scan(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+
+	for _, row := range rows {
+		counts[row.FuelID] = row.Total
+	}
+	return counts, nil
+}
+
+// --- Создание и публикация карточки через ORM ----------------------------- //
+
+// CreateDraft создаёт карточку в статусе «черновик». Файлы в этой лабораторной
+// на сервер не передаются, поэтому url медиа остаются пустыми и шаблоны
+// подставляют изображение и видео по умолчанию.
+func (r *FuelRepository) CreateDraft(creatorID uint, fuelName string) (models.Fuel, error) {
+	fuel := models.Fuel{
+		FuelName:   fuelName,
+		FuelStatus: models.FuelStatusDraft,
+		CreatorID:  creatorID,
+	}
+
+	if err := r.db.Create(&fuel).Error; err != nil {
+		return models.Fuel{}, err
+	}
+	return fuel, nil
+}
+
+func (r *FuelRepository) PublishDraft(fuelID uint, note string, heatOfCombustionKJ, ignitionTempC int) error {
+	formedAt := time.Now()
+
+	result := r.db.Model(&models.Fuel{}).
+		Where("fuel_id = ?", fuelID).
+		Where("fuel_status = ?", models.FuelStatusDraft).
+		Updates(map[string]any{
+			"combustion_note":       note,
+			"heat_of_combustion_kj": heatOfCombustionKJ,
+			"ignition_temp_c":       ignitionTempC,
+			"fuel_status":           models.FuelStatusPublished,
+			"formed_at":             formedAt,
+		})
+
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected == 0 {
+		return ErrDraftNotFound
+	}
+	return nil
+}
+
+
+func (r *FuelRepository) SoftDeleteFuel(fuelID uint) error {
+	sqlDB, err := r.db.DB()
+	if err != nil {
+		return err
+	}
+
+	rows, err := sqlDB.Query(
+		`UPDATE fuels
+		    SET fuel_status = $1
+		  WHERE fuel_id = $2
+		    AND fuel_status <> $1
+		RETURNING fuel_id`,
+		models.FuelStatusDeleted, fuelID,
+	)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+
+	var deletedID uint
+	if !rows.Next() {
+		if err := rows.Err(); err != nil {
+			return err
+		}
+		return ErrFuelNotFound
+	}
+	if err := rows.Scan(&deletedID); err != nil {
+		return err
+	}
+	return rows.Err()
 }

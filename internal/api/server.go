@@ -15,9 +15,12 @@ import (
 
 // StartServer собирает приложение и регистрирует маршруты.
 func StartServer(logger *logrus.Logger) error {
-	fuelRepository := repository.NewFuelRepository()
-	minioMedia := storage.NewMinioMedia()
-	fuelHandler := handler.NewFuelHandler(fuelRepository, minioMedia, logger)
+	fuelRepository, err := repository.NewFuelRepository()
+	if err != nil {
+		return err
+	}
+	mediaResolver := storage.NewMediaResolver()
+	fuelHandler := handler.NewFuelHandler(fuelRepository, mediaResolver, logger)
 
 	router := gin.Default()
 
@@ -29,10 +32,17 @@ func StartServer(logger *logrus.Logger) error {
 	router.LoadHTMLGlob("templates/*.html")
 	router.Static("/resources", "./resources")
 
+	// Три GET-метода: лента по идентификатору, черновик, список всех карточек.
 	router.GET("/fuel_feed", fuelHandler.GetFuelFeed)
 	router.GET("/fuel_feed/:fuel_id", fuelHandler.GetFuelFeed)
 	router.GET("/fuel_draft", fuelHandler.GetFuelDraft)
 	router.GET("/fuel_grid", fuelHandler.GetFuelGrid)
+
+	// Три POST-метода: создание черновика и публикация карточки через ORM,
+	// логическое удаление — запросом SQL UPDATE без ORM.
+	router.POST("/fuel_draft/create", fuelHandler.CreateFuelDraft)
+	router.POST("/fuel_draft/publish", fuelHandler.PublishFuelDraft)
+	router.POST("/fuel_grid/delete/:fuel_id", fuelHandler.DeleteFuel)
 
 	router.GET("/", func(ctx *gin.Context) {
 		ctx.Redirect(http.StatusFound, "/fuel_grid")

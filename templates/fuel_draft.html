@@ -8,66 +8,86 @@
     {{ template "heat_topbar" . }}
 
     <main class="heat-screen heat-screen--scroll">
+        {{ if .DraftErrorMsg }}
+        <p class="heat-form__error">{{ .DraftErrorMsg }}</p>
+        {{ end }}
+
         {{ if .HasDraft }}
         {{ with .HeatCard }}
         <p class="heat-draft__status">Черновик карточки топлива — статус «{{ .FuelStatus }}»</p>
+        {{ end }}
 
-        <form class="heat-form">
+        <form class="heat-form" method="post" action="/fuel_draft/publish">
             <fieldset class="heat-fieldset">
                 <legend class="heat-fieldset__legend">Изображение топлива</legend>
-                <img class="heat-form__preview" src="{{ .ImageURL }}" alt="{{ .FuelName }}">
-                <label class="heat-field__label" for="image_key">Ключ объекта в Minio</label>
-                <input class="heat-field__input" type="text" id="image_key" name="image_key" value="{{ .ImageKey }}">
-                <p class="heat-field__hint">{{ .ImageURL }}</p>
+                <img class="heat-form__preview" src="{{ .HeatCard.ImageURL }}" alt="{{ .HeatCard.FuelName }}">
             </fieldset>
 
             <fieldset class="heat-fieldset">
                 <legend class="heat-fieldset__legend">Видео горения</legend>
                 <video class="heat-form__preview"
-                       poster="{{ .ImageURL }}"
-                       src="{{ .VideoURL }}"
+                       poster="{{ .HeatCard.ImageURL }}"
+                       src="{{ .HeatCard.VideoURL }}"
                        autoplay muted loop playsinline preload="auto"></video>
-                <label class="heat-field__label" for="video_key">Ключ объекта в Minio</label>
-                <input class="heat-field__input" type="text" id="video_key" name="video_key" value="{{ .VideoKey }}">
-                <p class="heat-field__hint">{{ .VideoURL }}</p>
             </fieldset>
 
             <fieldset class="heat-fieldset">
                 <legend class="heat-fieldset__legend">Описание реакции горения</legend>
-                <label class="heat-field__label" for="fuel_name">Название топлива</label>
-                <input class="heat-field__input" type="text" id="fuel_name" name="fuel_name" value="{{ .FuelName }}">
 
-                <label class="heat-field__label" for="chemical_formula">Химическая формула</label>
-                <input class="heat-field__input" type="text" id="chemical_formula" name="chemical_formula" value="{{ .ChemicalFormula }}">
+                <label class="heat-field__label" for="fuel_name">Название топлива</label>
+                <input class="heat-field__input" type="text" id="fuel_name" value="{{ .Form.FuelName }}" readonly>
 
                 <label class="heat-field__label" for="combustion_note">Краткое описание</label>
-                <textarea class="heat-field__input heat-field__input--area" id="combustion_note" name="combustion_note" rows="6">{{ .CombustionNote }}</textarea>
+                <textarea class="heat-field__input heat-field__input--area" id="combustion_note" name="combustion_note" rows="6">{{ .Form.Note }}</textarea>
             </fieldset>
 
             <fieldset class="heat-fieldset">
                 <legend class="heat-fieldset__legend">Теплотехнические характеристики</legend>
 
                 <label class="heat-field__label" for="heat_of_combustion_kj">Теплота сгорания при н.у., кДж/м&sup3;</label>
-                <input class="heat-field__input" type="text" inputmode="numeric" id="heat_of_combustion_kj" name="heat_of_combustion_kj" value="{{ .HeatOfCombustionKJ }}">
+                <input class="heat-field__input" type="text" inputmode="numeric" id="heat_of_combustion_kj" name="heat_of_combustion_kj" value="{{ .Form.Heat }}">
 
                 <label class="heat-field__label" for="ignition_temp_c">Температура воспламенения, &deg;C</label>
-                <input class="heat-field__input" type="text" inputmode="numeric" id="ignition_temp_c" name="ignition_temp_c" value="{{ .IgnitionTempC }}">
+                <input class="heat-field__input" type="text" inputmode="numeric" id="ignition_temp_c" name="ignition_temp_c" value="{{ .Form.Ignition }}">
+            </fieldset>
 
-                <label class="heat-field__label" for="flame_temp_c">Температура пламени, &deg;C</label>
-                <input class="heat-field__input" type="text" inputmode="numeric" id="flame_temp_c" name="flame_temp_c" value="{{ .FlameTempC }}">
+            <button class="heat-button heat-button--wide" type="submit">Опубликовать</button>
+        </form>
+        {{ else }}
+        <p class="heat-draft__status heat-draft__status--new">Новая карточка топлива</p>
 
-                <label class="heat-field__label" for="air_demand_m3">Расход воздуха, м&sup3; на 1 м&sup3; топлива</label>
-                <input class="heat-field__input" type="text" inputmode="decimal" id="air_demand_m3" name="air_demand_m3" value="{{ printf "%.2f" .AirDemandM3 }}">
+        <form class="heat-form" method="post" action="/fuel_draft/create" enctype="multipart/form-data">
+            <fieldset class="heat-fieldset">
+                <legend class="heat-fieldset__legend">Изображение топлива</legend>
+                <img class="heat-form__preview" src="{{ .DefaultImageURL }}" alt="Изображение по умолчанию">
+                <label class="heat-field__label" for="fuel_image">Файл изображения</label>
+                <input class="heat-field__input" type="file" id="fuel_image" name="fuel_image" accept="image/*">
+                <p class="heat-field__hint">{{ .DefaultImageURL }}</p>
+            </fieldset>
+
+            <fieldset class="heat-fieldset">
+                <legend class="heat-fieldset__legend">Видео горения</legend>
+                <video class="heat-form__preview"
+                       src="{{ .DefaultVideoURL }}"
+                       autoplay muted loop playsinline preload="auto"></video>
+                <label class="heat-field__label" for="fuel_video">Файл видео</label>
+                <input class="heat-field__input" type="file" id="fuel_video" name="fuel_video" accept="video/*">
+                <p class="heat-field__hint">{{ .DefaultVideoURL }}</p>
+            </fieldset>
+
+            <fieldset class="heat-fieldset">
+                <legend class="heat-fieldset__legend">Описание реакции горения</legend>
+                <label class="heat-field__label" for="fuel_name">Название топлива</label>
+                <input class="heat-field__input" type="text" id="fuel_name" name="fuel_name" value="{{ .Form.FuelName }}" placeholder="например, Коксовый газ">
             </fieldset>
 
             <p class="heat-form__note">
-                В первой лабораторной работе сохранение карточек не реализуется:
-                поля черновика можно заполнить, но коллекция не изменяется.
+                Во второй лабораторной работе файлы на сервер не передаются:
+                новая карточка получает изображение и видео по умолчанию.
             </p>
+
+            <button class="heat-button heat-button--wide" type="submit">Далее</button>
         </form>
-        {{ end }}
-        {{ else }}
-        <p class="heat-grid__empty">В коллекции нет карточки топлива в статусе «черновик».</p>
         {{ end }}
     </main>
 

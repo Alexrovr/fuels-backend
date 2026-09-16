@@ -28,7 +28,9 @@
                         <span style="--pos: 100%;">110 000</span>
                     </div>
                 </div>
-                <span class="heat-filter__value">{{ if .MinHeatFilter }}{{ .MinHeatFilter }}{{ else }}0{{ end }} кДж/м&sup3;</span>
+            </div>
+            <div class="heat-filter__actions">
+                <span class="heat-filter__value">от {{ if .MinHeatFilter }}{{ .MinHeatFilter }}{{ else }}0{{ end }} кДж/м&sup3;</span>
                 <button class="heat-button heat-button--filter" type="submit">Найти</button>
             </div>
             {{ if .FilterErrorMsg }}
@@ -38,13 +40,13 @@
 
         {{ if .HeatCards }}
         <ul class="heat-grid">
+            {{ $minHeat := .MinHeatFilter }}
             {{ range .HeatCards }}
             <li class="heat-grid__cell">
                 <a class="heat-card" href="/fuel_feed/{{ .FuelID }}">
                     <img class="heat-card__image" src="{{ .ImageURL }}" alt="{{ .FuelName }}">
                     <div class="heat-card__body">
                         <h2 class="heat-card__name">{{ .FuelName }}</h2>
-                        <p class="heat-card__formula">{{ .ChemicalFormula }}</p>
                         <p class="heat-card__heat">{{ .HeatOfCombustionKJ }} <span class="heat-card__unit">кДж/м&sup3;</span></p>
                         <span class="heat-like heat-like--card">
                             <span class="heat-like__icon">&#10084;</span>
@@ -52,6 +54,10 @@
                         </span>
                     </div>
                 </a>
+                <form class="heat-card__delete" method="post" action="/fuel_grid/delete/{{ .FuelID }}">
+                    <input type="hidden" name="min_heat" value="{{ $minHeat }}">
+                    <button class="heat-button heat-button--delete" type="submit">Удалить</button>
+                </form>
             </li>
             {{ end }}
         </ul>
