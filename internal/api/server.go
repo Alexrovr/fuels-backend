@@ -1,7 +1,6 @@
 package api
 
 import (
-	"html/template"
 	"net/http"
 	"os"
 
@@ -24,11 +23,6 @@ func StartServer(logger *logrus.Logger) error {
 
 	router := gin.Default()
 
-	router.SetFuncMap(template.FuncMap{
-		"heatForVolume": func(heatOfCombustionKJ int, volumeM3 float64) float64 {
-			return float64(heatOfCombustionKJ) * volumeM3
-		},
-	})
 	router.LoadHTMLGlob("templates/*.html")
 	router.Static("/resources", "./resources")
 

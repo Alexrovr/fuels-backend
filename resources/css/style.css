@@ -280,16 +280,6 @@ body {
     display: block;
 }
 
-.heat-reel__calc {
-    margin: 0;
-    font-size: 11px;
-    color: #CFCFCF;
-}
-
-.heat-reel__calc b {
-    color: var(--heat-accent);
-}
-
 /* --- Лайки --------------------------------------------------------------- */
 
 .heat-like {
@@ -359,16 +349,7 @@ body {
 .heat-button--delete {
     width: 100%;
     padding: 7px;
-    border-color: var(--heat-border);
-    background: var(--heat-white);
-    color: var(--heat-muted);
     font-size: 10px;
-}
-
-.heat-button--delete:hover {
-    border-color: var(--heat-accent);
-    background: var(--heat-accent);
-    color: var(--heat-white);
 }
 
 .heat-button--side {
