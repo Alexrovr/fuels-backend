@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/sirupsen/logrus"
+	"golang.org/x/crypto/bcrypt"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 
@@ -50,12 +51,20 @@ func main() {
 	logger.Info("таблицы созданы и наполнены данными")
 }
 
+// seedPassword — пароль всех стартовых пользователей. В базу пишется только его bcrypt-хэш.
+const seedPassword = "heat12345"
+
 func seed(db *gorm.DB) error {
+	passwordHash, err := bcrypt.GenerateFromPassword([]byte(seedPassword), bcrypt.DefaultCost)
+	if err != nil {
+		return err
+	}
+
 	users := []models.User{
-		{Login: "ivanov", FullName: "Иванов Иван"},
-		{Login: "petrova", FullName: "Петрова Анна"},
-		{Login: "smirnov", FullName: "Смирнов Пётр"},
-		{Login: "kuznecova", FullName: "Кузнецова Мария"},
+		{Login: "ivanov", FullName: "Иванов Иван", Password: string(passwordHash)},
+		{Login: "petrova", FullName: "Петрова Анна", Password: string(passwordHash)},
+		{Login: "smirnov", FullName: "Смирнов Пётр", Password: string(passwordHash)},
+		{Login: "kuznecova", FullName: "Кузнецова Мария", Password: string(passwordHash)},
 	}
 	if err := db.Create(&users).Error; err != nil {
 		return err
@@ -121,9 +130,11 @@ func seed(db *gorm.DB) error {
 			CreatorID:          users[2].UserID,
 		},
 		{
-			// Карточка без медиа: на страницах подставляются фото и видео по умолчанию.
+			// Карточка без своих медиа: в url записаны фото и видео по умолчанию.
 			FuelName:           "Метано-водородная смесь",
 			FuelStatus:         models.FuelStatusDraft,
+			ImageURL:           storage.DefaultImagePath,
+			VideoURL:           storage.DefaultVideoPath,
 			HeatOfCombustionKJ: 0,
 			IgnitionTempC:      0,
 			CreatorID:          users[0].UserID,

@@ -15,6 +15,8 @@ type User struct {
 	UserID   uint   `gorm:"primaryKey;column:user_id"`
 	Login    string `gorm:"column:login;type:varchar(64);not null;uniqueIndex"`
 	FullName string `gorm:"column:full_name;type:varchar(128);not null"`
+	// Password — хэш пароля (bcrypt), открытый пароль в базе не хранится.
+	Password string `gorm:"column:password;type:varchar(255);not null"`
 }
 
 func (User) TableName() string {
@@ -29,8 +31,8 @@ type Fuel struct {
 	CombustionNote string     `gorm:"column:combustion_note;type:text"`
 	FuelStatus     FuelStatus `gorm:"column:fuel_status;type:varchar(16);not null;index"`
 
-	ImageURL string `gorm:"column:image_url;type:varchar(512)"`
-	VideoURL string `gorm:"column:video_url;type:varchar(512)"`
+	ImageURL string `gorm:"column:image_url;type:varchar(512);not null"`
+	VideoURL string `gorm:"column:video_url;type:varchar(512);not null"`
 
 	HeatOfCombustionKJ int `gorm:"column:heat_of_combustion_kj;index"`
 	IgnitionTempC      int `gorm:"column:ignition_temp_c"`

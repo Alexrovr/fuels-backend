@@ -10,6 +10,7 @@ import (
 
 	"heat-backend/internal/app/dsn"
 	"heat-backend/internal/app/models"
+	"heat-backend/internal/app/storage"
 )
 
 var ErrFuelNotFound = errors.New("вид топлива не найден")
@@ -138,12 +139,14 @@ func (r *FuelRepository) LikesCountByFuel(fuelIDs []uint) (map[uint]int, error) 
 // --- Создание и публикация карточки через ORM ----------------------------- //
 
 // CreateDraft создаёт карточку в статусе «черновик». Файлы в этой лабораторной
-// на сервер не передаются, поэтому url медиа остаются пустыми и шаблоны
-// подставляют изображение и видео по умолчанию.
+// на сервер не передаются, а url медиа обязательны, поэтому в них записываются
+// адреса изображения и видео по умолчанию.
 func (r *FuelRepository) CreateDraft(creatorID uint, fuelName string) (models.Fuel, error) {
 	fuel := models.Fuel{
 		FuelName:   fuelName,
 		FuelStatus: models.FuelStatusDraft,
+		ImageURL:   storage.DefaultImagePath,
+		VideoURL:   storage.DefaultVideoPath,
 		CreatorID:  creatorID,
 	}
 
