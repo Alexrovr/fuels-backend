@@ -24,12 +24,10 @@ func (s FuelStatus) CanChangeTo(next FuelStatus) bool {
 	}
 }
 
-// User — пользователь справочника: создаёт карточки топлив и ставит лайки.
 type User struct {
 	UserID   uint   `gorm:"primaryKey;column:user_id"`
 	Login    string `gorm:"column:login;type:varchar(64);not null;uniqueIndex"`
 	FullName string `gorm:"column:full_name;type:varchar(128);not null"`
-	// Password — хэш пароля (bcrypt), открытый пароль в базе не хранится.
 	Password string `gorm:"column:password;type:varchar(255);not null"`
 }
 
@@ -37,7 +35,6 @@ func (User) TableName() string {
 	return "users"
 }
 
-// Fuel — «услуга» предметной области: вид топлива в справочнике теплоты сгорания.
 type Fuel struct {
 	FuelID uint `gorm:"primaryKey;column:fuel_id"`
 
@@ -62,7 +59,6 @@ func (Fuel) TableName() string {
 	return "fuels"
 }
 
-// FuelLike — связь «многие ко многим» между пользователями и видами топлива.
 type FuelLike struct {
 	LikeID uint `gorm:"primaryKey;column:like_id"`
 

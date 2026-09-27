@@ -1,9 +1,3 @@
-// Package serializers описывает JSON, которым веб-сервис обменивается с клиентом.
-//
-// Модели GORM (пакет models) описывают таблицы и в JSON напрямую не отдаются:
-// сериализаторы выбирают, какие поля видит клиент (пароль — никогда), и какие
-// он может прислать. Во входящих структурах нет системных полей — ид, статуса,
-// создателя, дат: они вычисляются на бэкенде.
 package serializers
 
 import (
@@ -12,24 +6,16 @@ import (
 	"heat-backend/internal/app/models"
 )
 
-// --- Запросы -------------------------------------------------------------- //
-
-// PublishFuelRequest — тело PUT /api/fuels/:fuel_id/publish. Поля необязательные:
-// непереданное поле берётся из черновика, но к публикации все три должны быть заполнены.
 type PublishFuelRequest struct {
 	CombustionNote     *string `json:"combustion_note"`
 	HeatOfCombustionKJ *int    `json:"heat_of_combustion_kj"`
 	IgnitionTempC      *int    `json:"ignition_temp_c"`
 }
 
-// LikeRequest — тело POST /api/fuels/:fuel_id/like: 1 ставит лайк, 0 отменяет.
 type LikeRequest struct {
 	Like *int `json:"like"`
 }
 
-// --- Ответы --------------------------------------------------------------- //
-
-// FuelListItem — карточка в списке (плитка): только то, что нужно для превью.
 type FuelListItem struct {
 	FuelID             uint   `json:"fuel_id"`
 	FuelName           string `json:"fuel_name"`
@@ -40,7 +26,6 @@ type FuelListItem struct {
 	Liked              bool   `json:"liked"`
 }
 
-// FuelDetail — полная карточка: лента, черновик, результат создания и публикации.
 type FuelDetail struct {
 	FuelID         uint              `json:"fuel_id"`
 	FuelName       string            `json:"fuel_name"`
