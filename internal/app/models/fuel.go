@@ -10,9 +10,6 @@ const (
 	FuelStatusDeleted   FuelStatus = "удален"
 )
 
-// CanChangeTo описывает допустимые переходы статуса. У создателя два метода:
-// опубликовать черновик и удалить карточку. Вернуть карточку в черновик
-// и восстановить удалённую нельзя.
 func (s FuelStatus) CanChangeTo(next FuelStatus) bool {
 	switch s {
 	case FuelStatusDraft:
