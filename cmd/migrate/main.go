@@ -131,13 +131,15 @@ func seed(db *gorm.DB) error {
 		},
 		{
 			// Карточка без своих медиа: в url записаны фото и видео по умолчанию.
+			// Черновик принадлежит petrova: у пользователя из singleton (ivanov)
+			// черновика нет, поэтому через API можно сразу добавить новую услугу.
 			FuelName:           "Метано-водородная смесь",
 			FuelStatus:         models.FuelStatusDraft,
 			ImageURL:           storage.DefaultImagePath,
 			VideoURL:           storage.DefaultVideoPath,
 			HeatOfCombustionKJ: 0,
 			IgnitionTempC:      0,
-			CreatorID:          users[0].UserID,
+			CreatorID:          users[1].UserID,
 		},
 		{
 			FuelName: "Коксовый газ",

@@ -3,7 +3,6 @@ package storage
 import (
 	"fmt"
 	"net/http"
-	"os"
 	"strings"
 	"sync"
 	"time"
@@ -85,20 +84,12 @@ func (m *MediaResolver) available(rawURL string) bool {
 }
 
 // MinioObjectURL собирает публичный адрес объекта в бакете Minio.
-// Используется при первичном наполнении базы.
+// Используется при первичном наполнении базы и при загрузке файлов через API.
 func MinioObjectURL(objectKey string) string {
 	if objectKey == "" {
 		return ""
 	}
 
-	endpoint := os.Getenv("MINIO_PUBLIC_ENDPOINT")
-	if endpoint == "" {
-		endpoint = "http://localhost:9000"
-	}
-	bucket := os.Getenv("MINIO_BUCKET")
-	if bucket == "" {
-		bucket = "heat-fuel-media"
-	}
-
-	return fmt.Sprintf("%s/%s/%s", strings.TrimRight(endpoint, "/"), bucket, objectKey)
+	endpoint := envOrDefault("MINIO_PUBLIC_ENDPOINT", "http://localhost:9000")
+	return fmt.Sprintf("%s/%s/%s", strings.TrimRight(endpoint, "/"), bucketName(), objectKey)
 }

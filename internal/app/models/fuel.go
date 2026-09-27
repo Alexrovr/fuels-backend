@@ -10,6 +10,20 @@ const (
 	FuelStatusDeleted   FuelStatus = "удален"
 )
 
+// CanChangeTo описывает допустимые переходы статуса. У создателя два метода:
+// опубликовать черновик и удалить карточку. Вернуть карточку в черновик
+// и восстановить удалённую нельзя.
+func (s FuelStatus) CanChangeTo(next FuelStatus) bool {
+	switch s {
+	case FuelStatusDraft:
+		return next == FuelStatusPublished || next == FuelStatusDeleted
+	case FuelStatusPublished:
+		return next == FuelStatusDeleted
+	default:
+		return false
+	}
+}
+
 // User — пользователь справочника: создаёт карточки топлив и ставит лайки.
 type User struct {
 	UserID   uint   `gorm:"primaryKey;column:user_id"`

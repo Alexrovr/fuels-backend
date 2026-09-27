@@ -21,7 +21,8 @@ type FuelRepository struct {
 }
 
 func NewFuelRepository() (*FuelRepository, error) {
-	db, err := gorm.Open(postgres.Open(dsn.FromEnv()), &gorm.Config{})
+	// TranslateError превращает ошибки уникальности PostgreSQL в gorm.ErrDuplicatedKey.
+	db, err := gorm.Open(postgres.Open(dsn.FromEnv()), &gorm.Config{TranslateError: true})
 	if err != nil {
 		return nil, fmt.Errorf("подключение к postgres: %w", err)
 	}
@@ -31,7 +32,6 @@ func NewFuelRepository() (*FuelRepository, error) {
 func (r *FuelRepository) DB() *gorm.DB {
 	return r.db
 }
-
 
 func (r *FuelRepository) GetPublishedFuels(minHeatKJ int) ([]models.Fuel, error) {
 	var fuels []models.Fuel
@@ -51,6 +51,7 @@ func (r *FuelRepository) GetPublishedFuelByID(fuelID uint) (models.Fuel, error) 
 	var fuel models.Fuel
 
 	err := r.db.
+		Preload("Creator").
 		Where("fuel_id = ?", fuelID).
 		Where("fuel_status = ?", models.FuelStatusPublished).
 		First(&fuel).Error
@@ -65,6 +66,7 @@ func (r *FuelRepository) GetNextPublishedFuel(fuelID uint) (models.Fuel, error) 
 	var fuel models.Fuel
 
 	err := r.db.
+		Preload("Creator").
 		Where("fuel_status = ?", models.FuelStatusPublished).
 		Where("fuel_id > ?", fuelID).
 		Order("fuel_id").
@@ -79,6 +81,7 @@ func (r *FuelRepository) GetFirstPublishedFuel() (models.Fuel, error) {
 	var fuel models.Fuel
 
 	err := r.db.
+		Preload("Creator").
 		Where("fuel_status = ?", models.FuelStatusPublished).
 		Order("fuel_id").
 		First(&fuel).Error
@@ -93,6 +96,7 @@ func (r *FuelRepository) GetDraftByCreator(userID uint) (models.Fuel, error) {
 	var fuel models.Fuel
 
 	err := r.db.
+		Preload("Creator").
 		Where("creator_id = ?", userID).
 		Where("fuel_status = ?", models.FuelStatusDraft).
 		First(&fuel).Error
@@ -179,7 +183,7 @@ func (r *FuelRepository) PublishDraft(fuelID uint, note string, heatOfCombustion
 	return nil
 }
 
-
+// SoftDeleteFuel — логическое удаление для SSR-страницы (ЛР2): запрос SQL UPDATE без ORM.
 func (r *FuelRepository) SoftDeleteFuel(fuelID uint) error {
 	sqlDB, err := r.db.DB()
 	if err != nil {

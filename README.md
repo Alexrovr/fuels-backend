@@ -7,7 +7,7 @@
 | Сущность курса | Сущность предметной области |
 |---|---|
 | `услуга` | вид топлива (метан, пропан-бутан, ацетилен, водород) |
-| `заявка` | расчёт количества теплоты в кДж, выделившейся при полном сгорании заданного объёма при н.у. (реализуется начиная с ЛР №3) |
+| `заявка` | расчёт количества теплоты в кДж, выделившейся при полном сгорании заданного объёма при н.у. |
 
 ---
 
@@ -22,7 +22,8 @@
 | ORM | GORM (`gorm.io/gorm` + `gorm.io/driver/postgres`) |
 | Панель администратора БД | Adminer, развёрнут в Docker |
 | Логирование | logrus (`github.com/sirupsen/logrus`) |
-| Хранилище файлов | Minio (S3), развёрнут в Docker |
+| Хранилище файлов | Minio (S3), развёрнут в Docker; клиент `github.com/minio/minio-go/v7` |
+| Веб-сервис | JSON API под `/api` для будущего SPA (ЛР3), тестируется в Postman |
 | JavaScript | **не используется** — по заданию |
 
 ---
@@ -67,6 +68,7 @@ go run ./cmd/app
 ```
 
 Приложение поднимается на <http://localhost:3030> и редиректит `/` на плитку.
+Веб-сервис — на том же порту под префиксом `/api` (раздел 4.1).
 
 Переменные окружения (все необязательные):
 
@@ -77,6 +79,8 @@ go run ./cmd/app
 | `DB_PORT` | `5434` | порт PostgreSQL |
 | `DB_USER` / `DB_PASSWORD` | `heat` / `heat` | учётные данные |
 | `DB_NAME` | `heat_fuels` | имя базы |
+| `MINIO_ENDPOINT` | `localhost:9000` | адрес S3 API Minio для загрузки файлов |
+| `MINIO_ACCESS_KEY` / `MINIO_SECRET_KEY` | `minioadmin` / `minioadmin` | учётные данные Minio |
 | `MINIO_PUBLIC_ENDPOINT` | `http://localhost:9000` | адрес Minio для сборки url медиа |
 | `MINIO_BUCKET` | `heat-fuel-media` | имя бакета |
 
@@ -91,10 +95,14 @@ cmd/app/main.go                       точка входа приложения
 cmd/migrate/main.go                   миграции таблиц и наполнение данными
 internal/api/server.go                настройка роутера, шаблонов, статики
 internal/app/dsn/dsn.go               строка подключения к PostgreSQL из окружения
-internal/app/models/fuel.go           модели User, Fuel, FuelLike + HeatCardView
-internal/app/repository/              слой доступа к данным (GORM и «сырой» SQL)
-internal/app/handler/                 слой контроллеров (шесть обработчиков)
+internal/app/auth/current_user.go     функция-singleton текущего пользователя (до ЛР4 — константа)
+internal/app/models/fuel.go           модели User, Fuel, FuelLike, переходы статусов + HeatCardView
+internal/app/serializers/             JSON запросов и ответов веб-сервиса
+internal/app/repository/              слой доступа к данным (GORM и «сырой» SQL для SSR-удаления)
+internal/app/handler/fuel_handler.go  SSR-страницы (ЛР2)
+internal/app/handler/*_api_handler.go веб-сервис: домены FuelDomain и UserDomain (ЛР3)
 internal/app/storage/media.go         подстановка медиа по умолчанию, сборка url Minio
+internal/app/storage/minio.go         загрузка файлов в Minio, генерация латинских имён
 templates/                            шаблоны трёх страниц + общие блоки
 resources/css/style.css               стили приложения, вынесены в отдельный файл
 resources/media/                      изображение и видео по умолчанию
@@ -106,7 +114,63 @@ docker-compose.yml                    PostgreSQL, Adminer, Minio
 
 ---
 
-## 4. Шесть HTTP-методов
+## 4. HTTP-методы
+
+### 4.1. Веб-сервис `/api` (ЛР3)
+
+Десять методов в двух доменах, все обращения к БД — через ORM, ответы — JSON.
+Роутинг — `registerAPI` в [internal/api/server.go](internal/api/server.go),
+интерфейсы доменов — `FuelDomain` и `UserDomain` в
+[fuel_api_handler.go](internal/app/handler/fuel_api_handler.go) и
+[user_api_handler.go](internal/app/handler/user_api_handler.go).
+
+| # | Метод и URL | Обработчик | Что делает | Коды |
+|---|---|---|---|---|
+| 1 | `GET /api/fuels?min_heat=50000` | `GetFuels` | список опубликованных с фильтром по теплоте сгорания | 200, 400 |
+| 2 | `GET /api/fuels/feed`<br>`GET /api/fuels/feed/:fuel_id`<br>`GET /api/fuels/feed/:fuel_id?next=true` | `GetFuelFeed` | лента: первая / эта / следующая опубликованная карточка | 200, 404 |
+| 3 | `GET /api/fuels/draft` | `GetFuelDraft` | черновик текущего пользователя, ид не указывается | 200, 404 |
+| 4 | `POST /api/fuels` (form-data: `fuel_name`, `image`, `video`) | `CreateFuel` | новый черновик, файлы — в Minio | 201, 400, 409, 413 |
+| 5 | `PUT /api/fuels/:fuel_id/publish` (JSON: `combustion_note`, `heat_of_combustion_kj`, `ignition_temp_c`) | `PublishFuel` | черновик → опубликован, ставит `formed_at` | 200, 400, 403, 404, 409 |
+| 6 | `DELETE /api/fuels/:fuel_id` | `DeleteFuel` | soft delete: статус → удален | 200, 403, 404 |
+| 7 | `POST /api/fuels/:fuel_id/like` (JSON: `{"like": 1}` / `{"like": 0}`) | `LikeFuel` | поставить / отменить лайк текущего пользователя | 200, 400, 404 |
+| 8 | `POST /api/users/register` (JSON: `login`, `full_name`, `password`) | `Register` | регистрация, пароль — bcrypt-хэш | 201, 400, 409 |
+| 9 | `POST /api/users/login` | `Login` | **заглушка до ЛР4**: проверяет пароль, сессию не создаёт | 200, 401 |
+| 10 | `POST /api/users/logout` | `Logout` | **заглушка до ЛР4** | 200 |
+
+Ошибки — всегда `{"error": "текст"}`.
+
+**Бизнес-правила:**
+
+* **Пользователь-создатель зафиксирован** функцией-singleton `auth.GetCurrentUser()`
+  ([internal/app/auth/current_user.go](internal/app/auth/current_user.go)): объект
+  создаётся один раз через `sync.Once`, `user_id` задан константой `creatorUserID = 1`.
+  Все методы услуги берут пользователя только оттуда.
+* **Переходы статусов** — `FuelStatus.CanChangeTo`: у создателя два метода —
+  `черновик → опубликован` (PUT publish) и `черновик/опубликован → удален` (DELETE).
+  Вернуть в черновик и восстановить удалённую нельзя (409). Публиковать и удалять
+  может только создатель карточки (403).
+* **Системные поля с клиента не принимаются.** В сериализаторах запросов их нет, JSON
+  разбирается с `DisallowUnknownFields`, поля формы проверяются по списку: попытка
+  передать `fuel_status`, `creator_id`, `formed_at`, `user_id`… даёт 400.
+* **Удалённые записи на клиент не передаются:** список и лента — только
+  опубликованные, остальные методы ищут карточку среди неудалённых (`404`).
+* **Не более одного черновика** — проверка в обработчике (409) и частичный уникальный индекс в БД.
+* **Файлы:** тип определяется по содержимому (первые 512 байт), изображение — jpeg/png/gif/webp/svg
+  до 5 МБ, видео — mp4/webm до 30 МБ. Имя генерирует бэкенд латиницей:
+  `fuel-image-20260926-162305-8cb80a19.jpg` (исходное, возможно кириллическое, имя
+  не используется). Файл кладётся в бакет `heat-fuel-media`, url объекта — в поля
+  `image_url` / `video_url`. Если запись в БД не удалась, загруженные файлы удаляются.
+
+**Сериализаторы** ([internal/app/serializers/](internal/app/serializers/)): модели GORM
+в JSON напрямую не отдаются. Ответы — `FuelListItem` (плитка), `FuelDetail` (лента,
+черновик, результат создания/публикации, с вложенным `creator`), `LikeResponse`,
+`UserShort` (без пароля). Запросы — `PublishFuelRequest`, `LikeRequest`,
+`RegisterRequest`, `LoginRequest`.
+
+Коллекция Postman и файлы для добавления услуги — в папке материалов ЛР3
+(`рип\лаба3\postman\`).
+
+### 4.2. SSR-страницы (ЛР2)
 
 | # | Метод и URL | Контроллер | Доступ к данным |
 |---|---|---|---|
@@ -225,8 +289,12 @@ fuels (1) ──< (N) fuel_likes   по fuel_likes.fuel_id
 | 2 | Пропан-бутан | 108 000 | опубликован |
 | 3 | Ацетилен | 56 000 | опубликован |
 | 4 | Водород | 10 800 | опубликован |
-| 5 | Метано-водородная смесь | — | **черновик** — без своих медиа (в url записаны файлы по умолчанию), открывается на странице добавления |
+| 5 | Метано-водородная смесь | — | **черновик** пользователя `petrova` — без своих медиа (в url записаны файлы по умолчанию) |
 | 6 | Коксовый газ | 16 600 | **удален** — в интерфейсе не отображается |
+
+Черновик №5 принадлежит `petrova`, а не пользователю из singleton (`ivanov`), поэтому
+через API сразу можно добавить новую услугу — второй черновик у одного пользователя
+запрещён.
 
 Проверка, что удалённая карточка недоступна: `GET /fuel_feed/6` возвращает
 `404` и страницу «Такого вида топлива нет в справочнике».
@@ -247,6 +315,12 @@ http://localhost:9000/heat-fuel-media/propane_butane.mp4
 Содержимое бакета `heat-fuel-media`: `metan.jpg`, `propan-bytan.jpg`,
 `acetilen.png`, `vodorod.jpg` и `methane.mp4`, `propane_butane.mp4`,
 `acetylene.mp4`, `hydrogen.mp4`.
+
+Файлы, добавленные через `POST /api/fuels`, ложатся туда же под именами, которые
+генерирует бэкенд: `fuel-image-<дата>-<время>-<8 hex>.<расш>` и
+`fuel-video-…` ([internal/app/storage/minio.go](internal/app/storage/minio.go)).
+В ответах API относительные пути медиа по умолчанию превращаются в полный адрес
+на этом сервере (`http://localhost:3030/resources/media/…`), чтобы SPA могло их загрузить.
 
 ### Медиа по умолчанию
 
@@ -345,21 +419,21 @@ http://localhost:9000/heat-fuel-media/propane_butane.mp4
 
 ---
 
-## 8. Что осталось сделать вручную
+## 8. Материалы вне репозитория (`рип\лаба3\`)
 
-* ~~ER-диаграмма в StarUML~~ — готова (`db.mdj` в папке материалов ЛР2):
-  ERD-нотация, три таблицы ровно как в разделе 5, типы с длиной, PK/FK/N/U,
-  неидентифицирующие связи 1 — 0..* с «вороньими лапками».
-* Собрать макет трёх страниц в **Figma** по скриншотам приложения
-  (420×860, те же три цвета, тот же шрифт).
-* Подготовить **скриншоты 1–22** по «Порядку показа» (см. раздел 9).
+* `class_diagram.mdj` — диаграмма классов StarUML: 4 страницы фронтенда
+  («page»), домены `FuelDomain` / `UserDomain` («interface») со всеми методами и url,
+  singleton `CurrentUser`, `MinioStorage`, модели, таблицы БД; зависимости
+  страницы → домены → модели → таблицы. `class_diagram.png` — её экспорт.
+* `postman/heat_fuels_lr3.postman_collection.json` — коллекция запросов,
+  `postman/media/` — изображение и видео для добавления услуги «Этилен».
+* `docs/pokaz_lr3.md` — сценарий показа и ответы на контрольные вопросы.
+* ER-диаграмма не менялась: схема БД в ЛР3 та же.
 
-## 9. Порядок показа — где что смотреть
+## 9. Порядок показа ЛР3 — где что смотреть
 
 | Скриншоты | Что показать | Где |
 |---|---|---|
-| 1–2 | Adminer: логически удалить услугу сменой статуса, посмотреть данные через `select` | <http://localhost:8081>, таблица `fuels` |
-| 3–10 | три страницы: поиск, удаление услуги, переход по url удалённой услуги (404), добавление услуги, `select` в БД, публикация карточки, снова `select` | `/fuel_grid`, `/fuel_draft`, `/fuel_feed/<id>` + Adminer |
-| 11–13 | в БД изменить поля по теме и количество строк в `fuel_likes`, показать изменения в приложении | Adminer → `/fuel_grid`, `/fuel_feed/<id>` |
-| 14–21 | модели, 5 контроллеров через ORM, удаление через `SQL UPDATE` | `internal/app/models/fuel.go`, `internal/app/handler/fuel_handler.go`, `FuelRepository.SoftDeleteFuel` |
-| 22 | фото и видео по умолчанию в HTML | `/fuel_draft` без черновика, раздел 6 |
+| 1–10 | коллекция Postman; выполнить: список с фильтром, добавление с картинкой и видео, черновик, публикация, лента без ид, лента `?next=true`, лайк, удаление, регистрация | Postman, коллекция из `рип\лаба3\postman\` |
+| 11–13 | изменённые данные через `select` | Adminer, запросы в `docs/pokaz_lr3.md` |
+| 14–16 | модели, сериализаторы, функция-singleton и её использование | `internal/app/models/fuel.go`, `internal/app/serializers/`, `internal/app/auth/current_user.go` |

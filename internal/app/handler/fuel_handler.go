@@ -9,14 +9,11 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/sirupsen/logrus"
 
+	"heat-backend/internal/app/auth"
 	"heat-backend/internal/app/models"
 	"heat-backend/internal/app/repository"
 	"heat-backend/internal/app/storage"
 )
-
-// Авторизации в этой лабораторной ещё нет, поэтому все действия выполняются
-// от имени одного пользователя справочника.
-const currentUserID uint = 1
 
 type FuelHandler struct {
 	repository *repository.FuelRepository
@@ -126,7 +123,7 @@ func (h *FuelHandler) renderFeedError(ctx *gin.Context, status int, message stri
 // создания с кнопкой «Далее». Если черновик есть — его поля и кнопка
 // «Опубликовать».
 func (h *FuelHandler) GetFuelDraft(ctx *gin.Context) {
-	draft, err := h.repository.GetDraftByCreator(currentUserID)
+	draft, err := h.repository.GetDraftByCreator(auth.CurrentUserID())
 	if err != nil {
 		h.renderDraft(ctx, http.StatusOK, nil, draftForm{}, "")
 		return
@@ -241,12 +238,12 @@ func (h *FuelHandler) CreateFuelDraft(ctx *gin.Context) {
 		return
 	}
 
-	if _, err := h.repository.GetDraftByCreator(currentUserID); err == nil {
+	if _, err := h.repository.GetDraftByCreator(auth.CurrentUserID()); err == nil {
 		ctx.Redirect(http.StatusSeeOther, "/fuel_draft")
 		return
 	}
 
-	draft, err := h.repository.CreateDraft(currentUserID, fuelName)
+	draft, err := h.repository.CreateDraft(auth.CurrentUserID(), fuelName)
 	if err != nil {
 		h.logger.Errorf("создание черновика: %v", err)
 		h.renderDraft(ctx, http.StatusInternalServerError, nil, draftForm{FuelName: fuelName},
@@ -254,7 +251,7 @@ func (h *FuelHandler) CreateFuelDraft(ctx *gin.Context) {
 		return
 	}
 
-	h.logger.Infof("создан черновик карточки %d пользователем %d", draft.FuelID, currentUserID)
+	h.logger.Infof("создан черновик карточки %d пользователем %d", draft.FuelID, auth.CurrentUserID())
 	ctx.Redirect(http.StatusSeeOther, "/fuel_draft")
 }
 
@@ -263,7 +260,7 @@ func (h *FuelHandler) CreateFuelDraft(ctx *gin.Context) {
 // Кнопка «Опубликовать»: заполняет краткое описание и оба поля по теме,
 // переводит карточку в статус «опубликован» через ORM.
 func (h *FuelHandler) PublishFuelDraft(ctx *gin.Context) {
-	draft, err := h.repository.GetDraftByCreator(currentUserID)
+	draft, err := h.repository.GetDraftByCreator(auth.CurrentUserID())
 	if err != nil {
 		ctx.Redirect(http.StatusSeeOther, "/fuel_draft")
 		return
@@ -297,7 +294,7 @@ func (h *FuelHandler) PublishFuelDraft(ctx *gin.Context) {
 		return
 	}
 
-	h.logger.Infof("карточка %d опубликована пользователем %d", draft.FuelID, currentUserID)
+	h.logger.Infof("карточка %d опубликована пользователем %d", draft.FuelID, auth.CurrentUserID())
 	ctx.Redirect(http.StatusSeeOther, "/fuel_grid")
 }
 
