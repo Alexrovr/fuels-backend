@@ -23,7 +23,7 @@ type FuelListItem struct {
 	IgnitionTempC      int    `json:"ignition_temp_c"`
 	ImageURL           string `json:"image_url"`
 	LikesCount         int    `json:"likes_count"`
-	Liked              bool   `json:"liked"`
+	IsLiked            bool   `json:"is_liked"`
 }
 
 type FuelDetail struct {
@@ -40,16 +40,20 @@ type FuelDetail struct {
 
 	CreatedAt time.Time  `json:"created_at"`
 	FormedAt  *time.Time `json:"formed_at"`
-	Creator   UserShort  `json:"creator"`
+	// CreatorLogin — логин автора плоским полем: вложенный объект пользователя
+	// клиенту не нужен, а «своя ли карточка» передаёт IsMine
+	CreatorLogin string `json:"creator_login"`
 
 	LikesCount int  `json:"likes_count"`
-	Liked      bool `json:"liked"`
+	IsLiked    bool `json:"is_liked"`
+	// IsMine — карточку создал текущий пользователь
+	IsMine bool `json:"is_mine"`
 }
 
 // LikeResponse — состояние лайка после POST /api/fuels/:fuel_id/like.
 type LikeResponse struct {
 	FuelID     uint `json:"fuel_id"`
-	Liked      bool `json:"liked"`
+	IsLiked    bool `json:"is_liked"`
 	LikesCount int  `json:"likes_count"`
 }
 
@@ -64,12 +68,12 @@ func NewFuelListItem(fuel models.Fuel, likesCount int, liked bool, media MediaUR
 		IgnitionTempC:      fuel.IgnitionTempC,
 		ImageURL:           media(fuel.ImageURL),
 		LikesCount:         likesCount,
-		Liked:              liked,
+		IsLiked:            liked,
 	}
 }
 
 // NewFuelDetail собирает полную карточку. fuel.Creator должен быть загружен (Preload).
-func NewFuelDetail(fuel models.Fuel, likesCount int, liked bool, media MediaURL) FuelDetail {
+func NewFuelDetail(fuel models.Fuel, likesCount int, liked, isMine bool, media MediaURL) FuelDetail {
 	return FuelDetail{
 		FuelID:             fuel.FuelID,
 		FuelName:           fuel.FuelName,
@@ -81,8 +85,9 @@ func NewFuelDetail(fuel models.Fuel, likesCount int, liked bool, media MediaURL)
 		VideoURL:           media(fuel.VideoURL),
 		CreatedAt:          fuel.CreatedAt,
 		FormedAt:           fuel.FormedAt,
-		Creator:            NewUserShort(fuel.Creator),
+		CreatorLogin:       fuel.Creator.Login,
 		LikesCount:         likesCount,
-		Liked:              liked,
+		IsLiked:            liked,
+		IsMine:             isMine,
 	}
 }

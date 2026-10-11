@@ -163,8 +163,8 @@ docker-compose.yml                    PostgreSQL, Adminer, Minio
 
 **Сериализаторы** ([internal/app/serializers/](internal/app/serializers/)): модели GORM
 в JSON напрямую не отдаются. Ответы — `FuelListItem` (плитка), `FuelDetail` (лента,
-черновик, результат создания/публикации, с вложенным `creator`), `LikeResponse`,
-`UserShort` (без пароля). Запросы — `PublishFuelRequest`, `LikeRequest`,
+черновик, результат создания/публикации; автор — плоским полем `creator_login`), `LikeResponse`,
+`UserShort` (без пароля, в ответах регистрации и входа). Запросы — `PublishFuelRequest`, `LikeRequest`,
 `RegisterRequest`, `LoginRequest`.
 
 Коллекция Postman и файлы для добавления услуги — в папке материалов ЛР3

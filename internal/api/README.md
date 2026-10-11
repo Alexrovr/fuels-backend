@@ -136,19 +136,21 @@ video      file  обязательно, mp4/webm, ≤ 30 МБ
 
 ```text
 FuelListItem  { fuel_id: uint, fuel_name: string, heat_of_combustion_kj: int, ignition_temp_c: int,
-                image_url: string, likes_count: int, liked: bool }
+                image_url: string, likes_count: int, is_liked: bool }
 
 FuelDetail    { fuel_id: uint, fuel_name: string, combustion_note: string,
                 fuel_status: "черновик" | "опубликован",
                 heat_of_combustion_kj: int, ignition_temp_c: int,
                 image_url: string, video_url: string,
                 created_at: RFC3339, formed_at: RFC3339 | null,
-                creator: UserShort, likes_count: int, liked: bool }
+                creator_login: string, likes_count: int, is_liked: bool, is_mine: bool }
 
-LikeResponse  { fuel_id: uint, liked: bool, likes_count: int }
+LikeResponse  { fuel_id: uint, is_liked: bool, likes_count: int }
 
 UserShort     { user_id: uint, login: string, full_name: string }
 ```
 
-- `liked` — поставил ли лайк текущий пользователь; `likes_count` — `count(*)` по `fuel_likes`.
+- `is_liked` — поставил ли лайк текущий пользователь; `likes_count` — `count(*)` по `fuel_likes`.
+- `creator_login` — логин автора карточки, плоским полем (без вложенного объекта пользователя).
+- `is_mine` — карточку создал текущий пользователь (`creator_id` = id из singleton); есть в ленте, черновике и ответах создания/публикации.
 - Медиа по умолчанию (`/resources/media/...`) отдаются полным url этого сервера.

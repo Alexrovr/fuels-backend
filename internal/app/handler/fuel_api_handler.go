@@ -48,17 +48,20 @@ func NewFuelAPIHandler(
 	}
 }
 
-// fuelDetail добавляет к карточке число лайков и отметку «лайкнул текущий пользователь».
+// fuelDetail добавляет к карточке число лайков и отметки «лайкнул текущий пользователь»
+// и «карточку создал текущий пользователь».
 func (h *FuelAPIHandler) fuelDetail(ctx *gin.Context, fuel models.Fuel) (serializers.FuelDetail, error) {
 	likesCount, err := h.repository.LikesCount(fuel.FuelID)
 	if err != nil {
 		return serializers.FuelDetail{}, err
 	}
-	liked, err := h.repository.IsLikedBy(auth.CurrentUserID(), fuel.FuelID)
+	userID := auth.CurrentUserID()
+	liked, err := h.repository.IsLikedBy(userID, fuel.FuelID)
 	if err != nil {
 		return serializers.FuelDetail{}, err
 	}
-	return serializers.NewFuelDetail(fuel, likesCount, liked, absoluteMediaURL(ctx)), nil
+	isMine := fuel.CreatorID == userID
+	return serializers.NewFuelDetail(fuel, likesCount, liked, isMine, absoluteMediaURL(ctx)), nil
 }
 
 func (h *FuelAPIHandler) respondFuel(ctx *gin.Context, status int, fuel models.Fuel) {
@@ -479,7 +482,7 @@ func (h *FuelAPIHandler) LikeFuel(ctx *gin.Context) {
 
 	ctx.JSON(http.StatusOK, serializers.LikeResponse{
 		FuelID:     fuel.FuelID,
-		Liked:      *request.Like == 1,
+		IsLiked:    *request.Like == 1,
 		LikesCount: likesCount,
 	})
 }
