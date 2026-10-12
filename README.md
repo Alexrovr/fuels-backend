@@ -1,4 +1,4 @@
-# fuel-backend — Лабораторная работа №3
+# fuel-backend — Лабораторная работа №4
 
 Заявочная система по курсу «Разработка Интернет Приложений» (РИП).
 
@@ -24,6 +24,8 @@
 | Логирование | logrus (`github.com/sirupsen/logrus`) |
 | Хранилище файлов | Minio (S3), развёрнут в Docker; клиент `github.com/minio/minio-go/v7` |
 | Веб-сервис | JSON API под `/api` для будущего SPA (ЛР3), тестируется в Postman |
+| Авторизация | JWT HS256 (`github.com/golang-jwt/jwt/v5`) + чёрный список отозванных токенов в Redis 7.4 (`github.com/redis/go-redis/v9`) — ЛР4 |
+| Документация API | Swagger: `swaggo/swag` + `gin-swagger`, <http://localhost:3030/swagger/index.html> — ЛР4 |
 | JavaScript | **не используется** — по заданию |
 
 ---
@@ -36,7 +38,7 @@
 docker compose up -d
 ```
 
-Поднимаются четыре сервиса:
+Поднимаются пять сервисов:
 
 | Сервис | Адрес | Назначение |
 |---|---|---|
@@ -44,6 +46,7 @@ docker compose up -d
 | `heat-adminer` | <http://localhost:8081> | панель администратора БД |
 | `heat-minio` | <http://localhost:9000>, консоль <http://localhost:9001> | изображения и видео карточек |
 | `heat-minio-init` | — | разовое создание бакета `heat-fuel-media` |
+| `heat-redis` | `localhost:6379`, пароль `heat` | чёрный список JWT (ЛР4) |
 
 Вход в Adminer: система **PostgreSQL**, сервер `heat-postgres`,
 пользователь `heat`, пароль `heat`, база `heat_fuels`.
@@ -83,6 +86,22 @@ go run ./cmd/app
 | `MINIO_ACCESS_KEY` / `MINIO_SECRET_KEY` | `minioadmin` / `minioadmin` | учётные данные Minio |
 | `MINIO_PUBLIC_ENDPOINT` | `http://localhost:9000` | адрес Minio для сборки url медиа |
 | `MINIO_BUCKET` | `heat-fuel-media` | имя бакета |
+| `JWT_SECRET` | `heat-fuels-lab4-dev-secret` | ключ подписи JWT (HS256) |
+| `JWT_TTL` | `1h` | срок жизни токена (длительность Go: `30m`, `24h`) |
+| `REDIS_HOST` / `REDIS_PORT` | `localhost` / `6379` | адрес Redis |
+| `REDIS_PASSWORD` | `heat` | пароль Redis (`--requirepass` в compose) |
+
+Без запущенного Redis приложение не стартует: при запуске выполняется `PING`.
+
+### 2.4. Пересобрать Swagger после изменения аннотаций
+
+```bash
+go install github.com/swaggo/swag/cmd/swag@latest   # один раз
+swag init -g cmd/app/main.go -o docs/swagger
+```
+
+Сгенерированные `docs/swagger/{docs.go,swagger.json,swagger.yaml}` лежат в репозитории,
+поэтому для обычного запуска `swag` не нужен.
 
 ---
 
@@ -95,18 +114,23 @@ cmd/app/main.go                       точка входа приложения
 cmd/migrate/main.go                   миграции таблиц и наполнение данными
 internal/api/server.go                настройка роутера, шаблонов, статики
 internal/app/dsn/dsn.go               строка подключения к PostgreSQL из окружения
-internal/app/auth/current_user.go     функция-singleton текущего пользователя (до ЛР4 — константа)
+internal/app/config/config.go         настройки JWT и Redis из окружения (ЛР4)
+internal/app/auth/jwt.go              выпуск и проверка JWT (claims: user_id, login, jti, exp)
+internal/app/auth/blacklist.go        чёрный список отозванных JWT в Redis
+internal/app/auth/current_user.go     singleton пользователя из ЛР3 — теперь только для SSR-страниц
 internal/app/models/fuel.go           модели User, Fuel, FuelLike, переходы статусов + HeatCardView
 internal/app/serializers/             JSON запросов и ответов веб-сервиса
 internal/app/repository/              слой доступа к данным (GORM и «сырой» SQL для SSR-удаления)
 internal/app/handler/fuel_handler.go  SSR-страницы (ЛР2)
-internal/app/handler/*_api_handler.go веб-сервис: домены FuelDomain и UserDomain (ЛР3)
+internal/app/handler/*_api_handler.go веб-сервис: домены FuelDomain и UserDomain (ЛР3) + аннотации Swagger
+internal/app/handler/auth_middleware.go  проверка JWT: RequireAuth (создатель) / OptionalAuth (чтение)
+docs/swagger/                         описание API, сгенерированное swag init
 internal/app/storage/media.go         подстановка медиа по умолчанию, сборка url Minio
 internal/app/storage/minio.go         загрузка файлов в Minio, генерация латинских имён
 templates/                            шаблоны трёх страниц + общие блоки
 resources/css/style.css               стили приложения, вынесены в отдельный файл
 resources/media/                      изображение и видео по умолчанию
-docker-compose.yml                    PostgreSQL, Adminer, Minio
+docker-compose.yml                    PostgreSQL, Adminer, Minio, Redis
 ```
 
 Зависимости однонаправленные: **обработчики обращаются к репозиторию,
@@ -116,35 +140,36 @@ docker-compose.yml                    PostgreSQL, Adminer, Minio
 
 ## 4. HTTP-методы
 
-### 4.1. Веб-сервис `/api` (ЛР3)
+### 4.1. Веб-сервис `/api` (ЛР3–ЛР4)
 
 Десять методов в двух доменах, все обращения к БД — через ORM, ответы — JSON.
+Swagger: <http://localhost:3030/swagger/index.html>.
 Роутинг — `registerAPI` в [internal/api/server.go](internal/api/server.go),
 интерфейсы доменов — `FuelDomain` и `UserDomain` в
 [fuel_api_handler.go](internal/app/handler/fuel_api_handler.go) и
 [user_api_handler.go](internal/app/handler/user_api_handler.go).
 
-| # | Метод и URL | Обработчик | Что делает | Коды |
-|---|---|---|---|---|
-| 1 | `GET /api/fuels?min_heat=50000` | `GetFuels` | список опубликованных с фильтром по теплоте сгорания | 200, 400 |
-| 2 | `GET /api/fuels/feed`<br>`GET /api/fuels/feed/:fuel_id`<br>`GET /api/fuels/feed/:fuel_id?next=true` | `GetFuelFeed` | лента: первая / эта / следующая опубликованная карточка | 200, 404 |
-| 3 | `GET /api/fuels/draft` | `GetFuelDraft` | черновик текущего пользователя, ид не указывается | 200, 404 |
-| 4 | `POST /api/fuels` (form-data: `fuel_name`, `image`, `video`) | `CreateFuel` | новый черновик, файлы — в Minio | 201, 400, 409, 413 |
-| 5 | `PUT /api/fuels/:fuel_id/publish` (JSON: `combustion_note`, `heat_of_combustion_kj`, `ignition_temp_c`) | `PublishFuel` | черновик → опубликован, ставит `formed_at` | 200, 400, 403, 404, 409 |
-| 6 | `DELETE /api/fuels/:fuel_id` | `DeleteFuel` | soft delete: статус → удален | 200, 403, 404 |
-| 7 | `POST /api/fuels/:fuel_id/like` (JSON: `{"like": 1}` / `{"like": 0}`) | `LikeFuel` | поставить / отменить лайк текущего пользователя | 200, 400, 404 |
-| 8 | `POST /api/users/register` (JSON: `login`, `full_name`, `password`) | `Register` | регистрация, пароль — bcrypt-хэш | 201, 400, 409 |
-| 9 | `POST /api/users/login` | `Login` | **заглушка до ЛР4**: проверяет пароль, сессию не создаёт | 200, 401 |
-| 10 | `POST /api/users/logout` | `Logout` | **заглушка до ЛР4** | 200 |
+| # | Метод и URL | Обработчик | Что делает | Доступ | Коды |
+|---|---|---|---|---|---|
+| 1 | `GET /api/fuels?min_heat=50000` | `GetFuels` | список опубликованных с фильтром по теплоте сгорания | гость | 200, 400 |
+| 2 | `GET /api/fuels/feed`<br>`GET /api/fuels/feed/:fuel_id`<br>`GET /api/fuels/feed/:fuel_id?next=true` | `GetFuelFeed` | лента: первая / эта / следующая опубликованная карточка | гость | 200, 404 |
+| 3 | `GET /api/fuels/draft` | `GetFuelDraft` | черновик текущего пользователя, ид не указывается | JWT | 200, 401, 404 |
+| 4 | `POST /api/fuels` (form-data: `fuel_name`, `image`, `video`) | `CreateFuel` | новый черновик, файлы — в Minio, создатель — из JWT | JWT | 201, 400, 401, 409, 413 |
+| 5 | `PUT /api/fuels/:fuel_id/publish` (JSON: `combustion_note`, `heat_of_combustion_kj`, `ignition_temp_c`) | `PublishFuel` | черновик → опубликован, ставит `formed_at` | JWT, создатель карточки | 200, 400, 401, 403, 404, 409 |
+| 6 | `DELETE /api/fuels/:fuel_id` | `DeleteFuel` | soft delete: статус → удален | JWT, создатель карточки | 200, 401, 403, 404 |
+| 7 | `POST /api/fuels/:fuel_id/like` (JSON: `{"like": 1}` / `{"like": 0}`) | `LikeFuel` | поставить / отменить лайк текущего пользователя | JWT | 200, 400, 401, 404 |
+| 8 | `POST /api/users/register` (JSON: `login`, `full_name`, `password`) | `Register` | регистрация, пароль — bcrypt-хэш | гость | 201, 400, 409 |
+| 9 | `POST /api/users/login` (JSON: `login`, `password`) | `Login` | аутентификация, выдаёт JWT | гость | 200, 400, 401 |
+| 10 | `POST /api/users/logout` | `Logout` | деавторизация: токен — в чёрный список Redis | JWT | 200, 401 |
 
 Ошибки — всегда `{"error": "текст"}`.
 
 **Бизнес-правила:**
 
-* **Пользователь-создатель зафиксирован** функцией-singleton `auth.GetCurrentUser()`
-  ([internal/app/auth/current_user.go](internal/app/auth/current_user.go)): объект
-  создаётся один раз через `sync.Once`, `user_id` задан константой `creatorUserID = 1`.
-  Все методы услуги берут пользователя только оттуда.
+* **Пользователь берётся из JWT** (ЛР4): middleware кладёт проверенные claims в контекст gin,
+  обработчики читают `currentUserID(ctx)`. При создании услуги `creator_id` заполняется
+  автоматически пользователем из токена. Singleton `auth.GetCurrentUser()` из ЛР3 остался
+  только для SSR-страниц ЛР2, у которых авторизации нет.
 * **Переходы статусов** — `FuelStatus.CanChangeTo`: у создателя два метода —
   `черновик → опубликован` (PUT publish) и `черновик/опубликован → удален` (DELETE).
   Вернуть в черновик и восстановить удалённую нельзя (409). Публиковать и удалять
@@ -164,11 +189,44 @@ docker-compose.yml                    PostgreSQL, Adminer, Minio
 **Сериализаторы** ([internal/app/serializers/](internal/app/serializers/)): модели GORM
 в JSON напрямую не отдаются. Ответы — `FuelListItem` (плитка), `FuelDetail` (лента,
 черновик, результат создания/публикации; автор — плоским полем `creator_login`), `LikeResponse`,
-`UserShort` (без пароля, в ответах регистрации и входа). Запросы — `PublishFuelRequest`, `LikeRequest`,
-`RegisterRequest`, `LoginRequest`.
+`UserShort` (без пароля), `LoginResponse` (JWT + пользователь), `MessageResponse`, `DeleteFuelResponse`,
+`ErrorResponse`. Запросы — `PublishFuelRequest`, `LikeRequest`, `RegisterRequest`, `LoginRequest`.
 
-Коллекция Postman и файлы для добавления услуги — в папке материалов ЛР3
-(`рип\лаба3\postman\`).
+#### Авторизация JWT и чёрный список Redis (ЛР4)
+
+* **Вход** `POST /api/users/login` проверяет bcrypt-хэш и выдаёт токен:
+  `{"access_token": "eyJ…", "token_type": "Bearer", "expires_in": 3600, "user": {…}}`.
+  Токен подписан HS256 ключом `JWT_SECRET`, в нём `user_id`, `login`, `sub`, `iss = heat-fuels`,
+  `iat`, `exp` и уникальный `jti`. На сервере токен не хранится.
+* **Запросы** передают токен заголовком `Authorization: Bearer <access_token>`
+  (голый токен без `Bearer` тоже принимается — удобно в Swagger).
+* **Middleware** ([auth_middleware.go](internal/app/handler/auth_middleware.go)):
+  `RequireAuth` — методы создателя, нет токена / неверная подпись / просрочен / в чёрном списке → `401`;
+  `OptionalAuth` — чтение (список, лента): гость получает данные как обычно, а с токеном
+  дополнительно заполняются `is_liked` / `is_mine`; неверный токен здесь не ошибка.
+  Чужая карточка при публикации и удалении → `403`.
+* **Выход** `POST /api/users/logout` кладёт токен в Redis:
+  ключ `heat_fuels.jwt.<jti>` — хэш `{user_id, login, logout_at}` с TTL = остаток срока
+  жизни токена. После этого любой запрос с ним → `401 «Токен отозван»`.
+* **Содержимое Redis** (в cmd):
+
+  ```bash
+  docker exec -it heat-redis redis-cli -a heat --no-auth-warning
+  KEYS *
+  HGETALL heat_fuels.jwt.<jti>
+  TTL heat_fuels.jwt.<jti>
+  ```
+
+* **Swagger** — <http://localhost:3030/swagger/index.html>. Без Authorize в Swagger работает только
+  чтение (список, лента, регистрация, вход), методы создателя отвечают `401` — это видно по списку
+  кодов ответов: у чтения нет `401`. Замок (`@Security BearerAuth`) стоит и у чтения: Swagger UI
+  подставляет заголовок `Authorization` только в методы со схемой безопасности, без неё после
+  Authorize список и лента приходили бы без токена и `is_liked` / `is_mine` всегда были бы `false`.
+  Для чтения токен необязателен — гость получает `200`.
+  Порядок: `POST /users/login` → скопировать `access_token` → **Authorize** → `Bearer <токен>`.
+
+Коллекция Postman и файлы для добавления услуги — в папке материалов ЛР4
+(`рип\лаба4\postman\`).
 
 ### 4.2. SSR-страницы (ЛР2)
 
@@ -292,9 +350,10 @@ fuels (1) ──< (N) fuel_likes   по fuel_likes.fuel_id
 | 5 | Метано-водородная смесь | — | **черновик** пользователя `petrova` — без своих медиа (в url записаны файлы по умолчанию) |
 | 6 | Коксовый газ | 16 600 | **удален** — в интерфейсе не отображается |
 
-Черновик №5 принадлежит `petrova`, а не пользователю из singleton (`ivanov`), поэтому
-через API сразу можно добавить новую услугу — второй черновик у одного пользователя
-запрещён.
+Черновик №5 принадлежит `petrova`: войдя под ней, можно сразу опубликовать его
+(`PUT /api/fuels/5/publish`), а войдя под `ivanov` (у него черновика нет) — добавить новую
+услугу; второй черновик у одного пользователя запрещён. Пароль всех стартовых
+пользователей — `heat12345`.
 
 Проверка, что удалённая карточка недоступна: `GET /fuel_feed/6` возвращает
 `404` и страницу «Такого вида топлива нет в справочнике».
@@ -419,21 +478,27 @@ http://localhost:9000/heat-fuel-media/propane_butane.mp4
 
 ---
 
-## 8. Материалы вне репозитория (`рип\лаба3\`)
+## 8. Материалы вне репозитория (`рип\лаба4\`)
 
-* `class_diagram.mdj` — диаграмма классов StarUML: 4 страницы фронтенда
-  («page»), домены `FuelDomain` / `UserDomain` («interface») со всеми методами и url,
-  singleton `CurrentUser`, `MinioStorage`, модели, таблицы БД; зависимости
-  страницы → домены → модели → таблицы. `class_diagram.png` — её экспорт.
-* `postman/heat_fuels_lr3.postman_collection.json` — коллекция запросов,
-  `postman/media/` — изображение и видео для добавления услуги «Этилен».
-* `docs/pokaz_lr3.md` — сценарий показа и ответы на контрольные вопросы.
-* ER-диаграмма не менялась: схема БД в ЛР3 та же.
+* `diagrams.mdj` — один проект StarUML: ER-диаграмма, диаграмма классов (из ЛР3, в «Домен топлив»
+  добавлена операция `GET /api/fuels/feed`) и диаграмма последовательности бизнес-процесса.
+  Линии жизни — страницы и домены из диаграммы классов, у сообщений `signature` ссылается на
+  операции доменов, входные и выходные данные — в `arguments`. PNG-экспорт: `er_diagram.png`,
+  `class_diagram.png`, `sequence_diagram.png`.
+* `РПЗ_ЛР4.docx` (+ `.pdf`) — титульный лист, три диаграммы рисунками, Приложение 1 — ТЗ,
+  Приложение 2 — таблица методов веб-сервиса. На титуле жёлтым выделено, что заполнить.
+* `postman/heat_fuels_lr4.postman_collection.json` — коллекция с заголовком `Authorization: Bearer {{token}}`,
+  `postman/media/` — файлы для добавления услуги «Этилен».
+* `docs/pokaz_lr4.md` — сценарий показа и ответы на контрольные вопросы.
+* Материалы ЛР3 — в `рип\лаба3\`.
 
-## 9. Порядок показа ЛР3 — где что смотреть
+## 9. Порядок показа ЛР4 — где что смотреть
 
 | Скриншоты | Что показать | Где |
 |---|---|---|
-| 1–10 | коллекция Postman; выполнить: список с фильтром, добавление с картинкой и видео, черновик, публикация, лента без ид, лента `?next=true`, лайк, удаление, регистрация | Postman, коллекция из `рип\лаба3\postman\` |
-| 11–13 | изменённые данные через `select` | Adminer, запросы в `docs/pokaz_lr3.md` |
-| 14–16 | модели, сериализаторы, функция-singleton и её использование | `internal/app/models/fuel.go`, `internal/app/serializers/`, `internal/app/auth/current_user.go` |
+| 1–3 | вход через Swagger в режиме инкогнито, Authorize, список услуг в Swagger | <http://localhost:3030/swagger/index.html> |
+| 4–5 | список услуг в Postman без токена и с токеном — оба 200 | Postman, папка «Показ ЛР4» |
+| 6–8 | PUT публикации: гость → 401, чужая → 403, создатель → 200 и обновлённые поля; содержимое Redis | Postman + cmd (`redis-cli`) |
+| 9 | `signature` сообщения — операция из диаграммы классов | StarUML, `diagrams.mdj` |
+
+Подробный сценарий — `рип\лаба4\docs\pokaz_lr4.md`.

@@ -1,0 +1,544 @@
+basePath: /api
+definitions:
+  models.FuelStatus:
+    enum:
+    - черновик
+    - опубликован
+    - удален
+    type: string
+    x-enum-varnames:
+    - FuelStatusDraft
+    - FuelStatusPublished
+    - FuelStatusDeleted
+  serializers.DeleteFuelResponse:
+    properties:
+      fuel_id:
+        example: 7
+        type: integer
+      message:
+        example: Карточка переведена в статус «удален»
+        type: string
+    type: object
+  serializers.ErrorResponse:
+    properties:
+      error:
+        example: Текст ошибки
+        type: string
+    type: object
+  serializers.FuelDetail:
+    properties:
+      combustion_note:
+        type: string
+      created_at:
+        type: string
+      creator_login:
+        description: |-
+          CreatorLogin — логин автора плоским полем: вложенный объект пользователя
+          клиенту не нужен, а «своя ли карточка» передаёт IsMine
+        type: string
+      formed_at:
+        type: string
+      fuel_id:
+        type: integer
+      fuel_name:
+        type: string
+      fuel_status:
+        $ref: '#/definitions/models.FuelStatus'
+      heat_of_combustion_kj:
+        type: integer
+      ignition_temp_c:
+        type: integer
+      image_url:
+        type: string
+      is_liked:
+        type: boolean
+      is_mine:
+        description: IsMine — карточку создал текущий пользователь
+        type: boolean
+      likes_count:
+        type: integer
+      video_url:
+        type: string
+    type: object
+  serializers.FuelListItem:
+    properties:
+      fuel_id:
+        type: integer
+      fuel_name:
+        type: string
+      heat_of_combustion_kj:
+        type: integer
+      ignition_temp_c:
+        type: integer
+      image_url:
+        type: string
+      is_liked:
+        type: boolean
+      likes_count:
+        type: integer
+    type: object
+  serializers.LikeRequest:
+    properties:
+      like:
+        enum:
+        - 0
+        - 1
+        example: 1
+        type: integer
+    type: object
+  serializers.LikeResponse:
+    properties:
+      fuel_id:
+        type: integer
+      is_liked:
+        type: boolean
+      likes_count:
+        type: integer
+    type: object
+  serializers.LoginRequest:
+    properties:
+      login:
+        example: ivanov
+        type: string
+      password:
+        example: heat12345
+        type: string
+    type: object
+  serializers.LoginResponse:
+    properties:
+      access_token:
+        example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+        type: string
+      expires_in:
+        description: секунд
+        example: 3600
+        type: integer
+      token_type:
+        example: Bearer
+        type: string
+      user:
+        $ref: '#/definitions/serializers.UserShort'
+    type: object
+  serializers.MessageResponse:
+    properties:
+      message:
+        example: 'Выход выполнен: токен добавлен в чёрный список'
+        type: string
+    type: object
+  serializers.PublishFuelRequest:
+    properties:
+      combustion_note:
+        example: Этилен сгорает коптящим светящимся пламенем.
+        type: string
+      heat_of_combustion_kj:
+        example: 59000
+        type: integer
+      ignition_temp_c:
+        example: 450
+        type: integer
+    type: object
+  serializers.RegisterRequest:
+    properties:
+      full_name:
+        example: Сидоров Алексей
+        type: string
+      login:
+        example: sidorov
+        type: string
+      password:
+        example: heat54321
+        type: string
+    type: object
+  serializers.UserShort:
+    properties:
+      full_name:
+        example: Иванов Иван
+        type: string
+      login:
+        example: ivanov
+        type: string
+      user_id:
+        example: 1
+        type: integer
+    type: object
+host: localhost:3030
+info:
+  contact: {}
+  description: |-
+    JSON API справочника видов топлива для SPA (ЛР4).
+    Гость: только чтение — список, лента. Создатель (после входа): черновик, добавление, публикация, удаление, лайк, выход.
+    Вход: POST /users/login → скопировать access_token → кнопка Authorize → «Bearer <токен>».
+  title: Расчёт теплоты сгорания — веб-сервис
+  version: "4.0"
+paths:
+  /fuels:
+    get:
+      description: Опубликованные карточки с фильтром по нижней границе теплоты сгорания.
+        Доступно гостю без токена; токен необязателен — с ним дополнительно заполняется
+        is_liked.
+      parameters:
+      - description: Теплота сгорания не меньше, кДж/м³
+        in: query
+        minimum: 0
+        name: min_heat
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/serializers.FuelListItem'
+            type: array
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/serializers.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Список видов топлива (плитка)
+      tags:
+      - Услуги — виды топлива
+    post:
+      consumes:
+      - multipart/form-data
+      description: Черновик; создатель (creator_id) — пользователь из JWT. Файлы —
+        в Minio под латинскими именами.
+      parameters:
+      - description: Название, 1–128 символов
+        in: formData
+        name: fuel_name
+        required: true
+        type: string
+      - description: Изображение jpeg/png/gif/webp/svg, ≤ 5 МБ
+        in: formData
+        name: image
+        required: true
+        type: file
+      - description: Видео mp4/webm, ≤ 30 МБ
+        in: formData
+        name: video
+        required: true
+        type: file
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/serializers.FuelDetail'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/serializers.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/serializers.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/serializers.ErrorResponse'
+        "413":
+          description: Request Entity Too Large
+          schema:
+            $ref: '#/definitions/serializers.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Добавление вида топлива с изображением и видео
+      tags:
+      - Услуги — виды топлива
+  /fuels/{fuel_id}:
+    delete:
+      description: Статус → удален, строка остаётся в БД. Только создатель карточки.
+      parameters:
+      - description: Ид вида топлива
+        in: path
+        name: fuel_id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/serializers.DeleteFuelResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/serializers.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/serializers.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/serializers.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Удаление вида топлива (логическое)
+      tags:
+      - Услуги — виды топлива
+  /fuels/{fuel_id}/like:
+    post:
+      consumes:
+      - application/json
+      description: 1 — поставить лайк от пользователя из JWT, 0 — отменить. Только
+        опубликованные карточки.
+      parameters:
+      - description: Ид вида топлива
+        in: path
+        name: fuel_id
+        required: true
+        type: integer
+      - description: 'like: 1 или 0'
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/serializers.LikeRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/serializers.LikeResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/serializers.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/serializers.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/serializers.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Лайк
+      tags:
+      - Услуги — виды топлива
+  /fuels/{fuel_id}/publish:
+    put:
+      consumes:
+      - application/json
+      description: черновик → опубликован, дозаполняет описание и два поля по теме;
+        formed_at ставит бэкенд. Гость — 401, не создатель — 403.
+      parameters:
+      - description: Ид вида топлива
+        in: path
+        name: fuel_id
+        required: true
+        type: integer
+      - description: Поля карточки (необязательные)
+        in: body
+        name: body
+        schema:
+          $ref: '#/definitions/serializers.PublishFuelRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/serializers.FuelDetail'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/serializers.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/serializers.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/serializers.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/serializers.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/serializers.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Публикация черновика
+      tags:
+      - Услуги — виды топлива
+  /fuels/draft:
+    get:
+      description: 'Ид не указывается: черновик ищется по пользователю из JWT.'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/serializers.FuelDetail'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/serializers.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/serializers.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Черновик текущего пользователя
+      tags:
+      - Услуги — виды топлива
+  /fuels/feed:
+    get:
+      description: Первая опубликованная карточка. Доступно гостю без токена; токен
+        необязателен — с ним заполняются is_liked и is_mine.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/serializers.FuelDetail'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/serializers.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 'Лента: первая карточка'
+      tags:
+      - Услуги — виды топлива
+  /fuels/feed/{fuel_id}:
+    get:
+      description: С next=true — следующая опубликованная после fuel_id (по кругу).
+        Доступно гостю без токена; токен необязателен — с ним заполняются is_liked
+        и is_mine.
+      parameters:
+      - description: Ид вида топлива
+        in: path
+        name: fuel_id
+        required: true
+        type: integer
+      - description: true — следующая карточка
+        in: query
+        name: next
+        type: boolean
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/serializers.FuelDetail'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/serializers.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/serializers.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 'Лента: карточка по ид или следующая за ней'
+      tags:
+      - Услуги — виды топлива
+  /users/login:
+    post:
+      consumes:
+      - application/json
+      description: 'Возвращает JWT. Его нужно передавать в заголовке Authorization:
+        Bearer <access_token> (в Swagger — кнопка Authorize).'
+      parameters:
+      - description: Логин и пароль
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/serializers.LoginRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/serializers.LoginResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/serializers.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/serializers.ErrorResponse'
+      summary: Аутентификация (вход)
+      tags:
+      - Пользователи
+  /users/logout:
+    post:
+      description: Текущий JWT попадает в чёрный список Redis (ключ heat_fuels.jwt.<jti>)
+        до истечения срока; дальше с ним 401.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/serializers.MessageResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/serializers.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Деавторизация (выход)
+      tags:
+      - Пользователи
+  /users/register:
+    post:
+      consumes:
+      - application/json
+      description: Логин латиницей 3–64 символа, ФИО, пароль 6–72 символа. В БД —
+        bcrypt-хэш пароля.
+      parameters:
+      - description: Данные пользователя
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/serializers.RegisterRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/serializers.UserShort'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/serializers.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/serializers.ErrorResponse'
+      summary: Регистрация
+      tags:
+      - Пользователи
+schemes:
+- http
+securityDefinitions:
+  BearerAuth:
+    description: JWT из ответа POST /api/users/login в виде «Bearer <access_token>».
+    in: header
+    name: Authorization
+    type: apiKey
+swagger: "2.0"

@@ -7,13 +7,13 @@ import (
 )
 
 type PublishFuelRequest struct {
-	CombustionNote     *string `json:"combustion_note"`
-	HeatOfCombustionKJ *int    `json:"heat_of_combustion_kj"`
-	IgnitionTempC      *int    `json:"ignition_temp_c"`
+	CombustionNote     *string `json:"combustion_note" example:"Этилен сгорает коптящим светящимся пламенем."`
+	HeatOfCombustionKJ *int    `json:"heat_of_combustion_kj" example:"59000"`
+	IgnitionTempC      *int    `json:"ignition_temp_c" example:"450"`
 }
 
 type LikeRequest struct {
-	Like *int `json:"like"`
+	Like *int `json:"like" enums:"0,1" example:"1"`
 }
 
 type FuelListItem struct {
@@ -90,4 +90,16 @@ func NewFuelDetail(fuel models.Fuel, likesCount int, liked, isMine bool, media M
 		IsLiked:            liked,
 		IsMine:             isMine,
 	}
+}
+
+// DeleteFuelResponse — ответ DELETE /api/fuels/:fuel_id: удалённая карточка
+// клиенту не отдаётся, только её ид.
+type DeleteFuelResponse struct {
+	FuelID  uint   `json:"fuel_id" example:"7"`
+	Message string `json:"message" example:"Карточка переведена в статус «удален»"`
+}
+
+// ErrorResponse — единый формат ошибки веб-сервиса.
+type ErrorResponse struct {
+	Error string `json:"error" example:"Текст ошибки"`
 }

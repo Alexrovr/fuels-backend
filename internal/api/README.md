@@ -1,25 +1,27 @@
 # API веб-сервиса — справочник эндпоинтов
 
-JSON API бэкенда «Расчёт количества теплоты в реакции горения» для SPA (ЛР3).
+JSON API бэкенда «Расчёт количества теплоты в реакции горения» для SPA (ЛР3–ЛР4).
+Swagger UI: http://localhost:3030/swagger/index.html
 Роутинг — `registerAPI` в [server.go](server.go), обработчики — `internal/app/handler/*_api_handler.go`.
 
 ## Запуск и проверка
 
 ```bash
-docker compose up -d        # PostgreSQL :5434, Adminer :8081, Minio :9000
+docker compose up -d        # PostgreSQL :5434, Adminer :8081, Minio :9000, Redis :6379
 go run ./cmd/migrate        # таблицы + стартовые данные
 go run ./cmd/app            # API на http://localhost:3030/api
 ```
 
-Коллекция Postman со всеми запросами: `рип\лаба3\postman\heat_fuels_lr3.postman_collection.json`.
+Коллекция Postman со всеми запросами: `рип\лаба4\postman\heat_fuels_lr4.postman_collection.json`.
 
 ## Общие правила
 
 - **Base URL:** `http://localhost:3030`, все пути начинаются с `/api`.
 - **Формат:** тело запроса и ответа — JSON (кроме `POST /api/fuels`: `multipart/form-data`).
 - **Ошибка:** всегда `{"error": "текст"}` с кодом 400 / 401 / 403 / 404 / 409 / 413 / 500.
-- **Пользователь:** авторизации нет до ЛР4. Все методы работают от имени `user_id = 1` (ivanov),
-  его отдаёт функция-singleton `auth.GetCurrentUser()`. С клиента пользователь не передаётся.
+- **Пользователь:** из JWT в заголовке `Authorization: Bearer <access_token>` (выдаёт `POST /api/users/login`).
+  Гость (без токена) может только читать: список и ленту, а также регистрироваться и входить.
+  Остальные методы без действительного токена → `401`; отозванный (после logout) токен → `401`.
 - **Системные поля запрещены:** `fuel_id`, `fuel_status`, `creator_id`, `user_id`, `created_at`,
   `formed_at` вычисляет бэкенд. Любое поле, которого нет в описании запроса, → `400`.
 - **Удалённые записи** (`fuel_status = "удален"`) не отдаются ни одним методом → `404`.
@@ -40,8 +42,8 @@ go run ./cmd/app            # API на http://localhost:3030/api
 | 6 | DELETE | `/api/fuels/{fuel_id}` | — | 200 `{fuel_id, message}` |
 | 7 | POST | `/api/fuels/{fuel_id}/like` | JSON | 200 `LikeResponse` |
 | 8 | POST | `/api/users/register` | JSON | 201 `UserShort` |
-| 9 | POST | `/api/users/login` | JSON | 200 — заглушка до ЛР4 |
-| 10 | POST | `/api/users/logout` | — | 200 — заглушка до ЛР4 |
+| 9 | POST | `/api/users/login` | JSON | 200 `LoginResponse` |
+| 10 | POST | `/api/users/logout` | — (JWT) | 200 `{message}` |
 
 ### 1. `GET /api/fuels` — список услуг с фильтром
 
@@ -119,18 +121,21 @@ video      file  обязательно, mp4/webm, ≤ 30 МБ
 - В БД хранится bcrypt-хэш пароля, в ответе пароля нет.
 - Ошибки: неверный формат или лишнее поле → `400`; логин занят → `409`.
 
-### 9. `POST /api/users/login` — аутентификация (заглушка)
+### 9. `POST /api/users/login` — аутентификация
 
 ```json
-{ "login": "sidorov", "password": "heat54321" }
+{ "login": "ivanov", "password": "heat12345" }
 ```
 
-- Проверяет логин и пароль, но сессию и токен не создаёт: пользователь по-прежнему из singleton.
-- Ответ: `{"message": "...", "user": UserShort}`. Неверные данные → `401`.
+- Проверяет логин и bcrypt-хэш пароля, выдаёт JWT (HS256, срок `JWT_TTL`, по умолчанию 1 ч).
+- Ответ: `{"access_token": "eyJ…", "token_type": "Bearer", "expires_in": 3600, "user": UserShort}`.
+- Неверные данные → `401`.
 
-### 10. `POST /api/users/logout` — деавторизация (заглушка)
+### 10. `POST /api/users/logout` — деавторизация
 
-- Тела нет. Ответ: `{"message": "..."}`.
+- Тела нет, нужен заголовок `Authorization`. Токен попадает в чёрный список Redis
+  (`heat_fuels.jwt.<jti>`, хэш `user_id, login, logout_at`, TTL = остаток срока токена).
+- Ответ: `{"message": "..."}`. Дальше с этим токеном → `401`.
 
 ## Схемы ответов
 
@@ -152,5 +157,5 @@ UserShort     { user_id: uint, login: string, full_name: string }
 
 - `is_liked` — поставил ли лайк текущий пользователь; `likes_count` — `count(*)` по `fuel_likes`.
 - `creator_login` — логин автора карточки, плоским полем (без вложенного объекта пользователя).
-- `is_mine` — карточку создал текущий пользователь (`creator_id` = id из singleton); есть в ленте, черновике и ответах создания/публикации.
+- `is_mine` — карточку создал текущий пользователь (`creator_id` = id из JWT); у гостя `is_liked` и `is_mine` всегда `false`.
 - Медиа по умолчанию (`/resources/media/...`) отдаются полным url этого сервера.

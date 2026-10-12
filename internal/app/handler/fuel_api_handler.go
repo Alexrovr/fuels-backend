@@ -10,7 +10,6 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/sirupsen/logrus"
 
-	"heat-backend/internal/app/auth"
 	"heat-backend/internal/app/models"
 	"heat-backend/internal/app/repository"
 	"heat-backend/internal/app/serializers"
@@ -49,18 +48,20 @@ func NewFuelAPIHandler(
 }
 
 // fuelDetail добавляет к карточке число лайков и отметки «лайкнул текущий пользователь»
-// и «карточку создал текущий пользователь».
+// и «карточку создал текущий пользователь». У гостя обе отметки false.
 func (h *FuelAPIHandler) fuelDetail(ctx *gin.Context, fuel models.Fuel) (serializers.FuelDetail, error) {
 	likesCount, err := h.repository.LikesCount(fuel.FuelID)
 	if err != nil {
 		return serializers.FuelDetail{}, err
 	}
-	userID := auth.CurrentUserID()
-	liked, err := h.repository.IsLikedBy(userID, fuel.FuelID)
-	if err != nil {
-		return serializers.FuelDetail{}, err
+	userID := currentUserID(ctx)
+	liked := false
+	if userID != 0 {
+		if liked, err = h.repository.IsLikedBy(userID, fuel.FuelID); err != nil {
+			return serializers.FuelDetail{}, err
+		}
 	}
-	isMine := fuel.CreatorID == userID
+	isMine := userID != 0 && fuel.CreatorID == userID
 	return serializers.NewFuelDetail(fuel, likesCount, liked, isMine, absoluteMediaURL(ctx)), nil
 }
 
@@ -78,6 +79,16 @@ func (h *FuelAPIHandler) respondFuel(ctx *gin.Context, status int, fuel models.F
 //
 // Список опубликованных карточек с фильтрацией на бэкенде по нижней границе
 // теплоты сгорания (как слайдер в ЛР1). Черновики и удалённые не попадают.
+//
+// @Summary      Список видов топлива (плитка)
+// @Description  Опубликованные карточки с фильтром по нижней границе теплоты сгорания. Доступно гостю без токена; токен необязателен — с ним дополнительно заполняется is_liked.
+// @Tags         Услуги — виды топлива
+// @Produce      json
+// @Param        min_heat  query     int  false  "Теплота сгорания не меньше, кДж/м³"  minimum(0)
+// @Success      200       {array}   serializers.FuelListItem
+// @Failure      400       {object}  serializers.ErrorResponse
+// @Security     BearerAuth
+// @Router       /fuels [get]
 func (h *FuelAPIHandler) GetFuels(ctx *gin.Context) {
 	minHeatKJ := 0
 	if query := strings.TrimSpace(ctx.Query("min_heat")); query != "" {
@@ -106,11 +117,14 @@ func (h *FuelAPIHandler) GetFuels(ctx *gin.Context) {
 		respondError(ctx, http.StatusInternalServerError, "Не удалось посчитать лайки")
 		return
 	}
-	likedByMe, err := h.repository.LikedFuelIDs(auth.CurrentUserID(), fuelIDs)
-	if err != nil {
-		h.logger.Errorf("api: лайки пользователя: %v", err)
-		respondError(ctx, http.StatusInternalServerError, "Не удалось посчитать лайки")
-		return
+	likedByMe := map[uint]bool{} // у гостя лайков нет
+	if userID := currentUserID(ctx); userID != 0 {
+		likedByMe, err = h.repository.LikedFuelIDs(userID, fuelIDs)
+		if err != nil {
+			h.logger.Errorf("api: лайки пользователя: %v", err)
+			respondError(ctx, http.StatusInternalServerError, "Не удалось посчитать лайки")
+			return
+		}
 	}
 
 	items := make([]serializers.FuelListItem, 0, len(fuels))
@@ -125,6 +139,9 @@ func (h *FuelAPIHandler) GetFuels(ctx *gin.Context) {
 //
 // Лента: без ид — первая опубликованная карточка, с ид — эта карточка,
 // с next=true — следующая за ней (по кругу).
+//
+// Оба url ленты обслуживает этот метод; описание для Swagger — у swaggerFeedFirst
+// и swaggerFeedByID ниже (у url разный набор параметров).
 func (h *FuelAPIHandler) GetFuelFeed(ctx *gin.Context) {
 	var (
 		fuel models.Fuel
@@ -158,11 +175,51 @@ func (h *FuelAPIHandler) GetFuelFeed(ctx *gin.Context) {
 	h.respondFuel(ctx, http.StatusOK, fuel)
 }
 
+// У методов чтения @Security объявлен тоже: Swagger UI подставляет заголовок Authorization
+// только в методы со схемой безопасности, иначе после Authorize is_liked / is_mine
+// в Swagger всегда false. Токен для них необязателен (OptionalAuth), гость получает 200.
+//
+// swaggerFeedFirst и swaggerFeedByID — только описание двух url ленты для Swagger
+// (swag берёт аннотации у объявления функции); обработчик у обоих — GetFuelFeed.
+//
+// @Summary      Лента: первая карточка
+// @Description  Первая опубликованная карточка. Доступно гостю без токена; токен необязателен — с ним заполняются is_liked и is_mine.
+// @Tags         Услуги — виды топлива
+// @Produce      json
+// @Success      200  {object}  serializers.FuelDetail
+// @Failure      404  {object}  serializers.ErrorResponse
+// @Security     BearerAuth
+// @Router       /fuels/feed [get]
+func swaggerFeedFirst() {}
+
+// @Summary      Лента: карточка по ид или следующая за ней
+// @Description  С next=true — следующая опубликованная после fuel_id (по кругу). Доступно гостю без токена; токен необязателен — с ним заполняются is_liked и is_mine.
+// @Tags         Услуги — виды топлива
+// @Produce      json
+// @Param        fuel_id  path      int     true   "Ид вида топлива"
+// @Param        next     query     bool    false  "true — следующая карточка"
+// @Success      200      {object}  serializers.FuelDetail
+// @Failure      400      {object}  serializers.ErrorResponse
+// @Failure      404      {object}  serializers.ErrorResponse
+// @Security     BearerAuth
+// @Router       /fuels/feed/{fuel_id} [get]
+func swaggerFeedByID() {}
+
 // GetFuelDraft — GET /api/fuels/draft
 //
 // Черновик текущего пользователя (не более одного), ид не указывается.
+//
+// @Summary      Черновик текущего пользователя
+// @Description  Ид не указывается: черновик ищется по пользователю из JWT.
+// @Tags         Услуги — виды топлива
+// @Produce      json
+// @Success      200  {object}  serializers.FuelDetail
+// @Failure      401  {object}  serializers.ErrorResponse
+// @Failure      404  {object}  serializers.ErrorResponse
+// @Security     BearerAuth
+// @Router       /fuels/draft [get]
 func (h *FuelAPIHandler) GetFuelDraft(ctx *gin.Context) {
-	draft, err := h.repository.GetDraftByCreator(auth.CurrentUserID())
+	draft, err := h.repository.GetDraftByCreator(currentUserID(ctx))
 	switch {
 	case errors.Is(err, repository.ErrDraftNotFound):
 		respondError(ctx, http.StatusNotFound, "У пользователя нет черновика карточки")
@@ -181,8 +238,25 @@ func (h *FuelAPIHandler) GetFuelDraft(ctx *gin.Context) {
 // Создаёт карточку в статусе «черновик». Изображение и видео загружаются
 // в Minio под сгенерированными латинскими именами, url объектов записываются
 // в поля image_url и video_url.
+// Создатель (creator_id) заполняется автоматически пользователем из JWT.
+//
+// @Summary      Добавление вида топлива с изображением и видео
+// @Description  Черновик; создатель (creator_id) — пользователь из JWT. Файлы — в Minio под латинскими именами.
+// @Tags         Услуги — виды топлива
+// @Accept       multipart/form-data
+// @Produce      json
+// @Param        fuel_name  formData  string  true  "Название, 1–128 символов"
+// @Param        image      formData  file    true  "Изображение jpeg/png/gif/webp/svg, ≤ 5 МБ"
+// @Param        video      formData  file    true  "Видео mp4/webm, ≤ 30 МБ"
+// @Success      201        {object}  serializers.FuelDetail
+// @Failure      400        {object}  serializers.ErrorResponse
+// @Failure      401        {object}  serializers.ErrorResponse
+// @Failure      409        {object}  serializers.ErrorResponse
+// @Failure      413        {object}  serializers.ErrorResponse
+// @Security     BearerAuth
+// @Router       /fuels [post]
 func (h *FuelAPIHandler) CreateFuel(ctx *gin.Context) {
-	userID := auth.CurrentUserID()
+	userID := currentUserID(ctx) // создатель — из JWT, с клиента не передаётся
 
 	if _, err := h.repository.GetDraftByCreator(userID); err == nil {
 		respondError(ctx, http.StatusConflict,
@@ -320,7 +394,7 @@ func (h *FuelAPIHandler) ownActiveFuel(ctx *gin.Context) (models.Fuel, bool) {
 		return models.Fuel{}, false
 	}
 
-	if fuel.CreatorID != auth.CurrentUserID() {
+	if fuel.CreatorID != currentUserID(ctx) {
 		respondError(ctx, http.StatusForbidden, "Изменять статус карточки может только её создатель")
 		return models.Fuel{}, false
 	}
@@ -331,6 +405,22 @@ func (h *FuelAPIHandler) ownActiveFuel(ctx *gin.Context) (models.Fuel, bool) {
 //
 // Смена статуса «черновик» → «опубликован». Тело (JSON) дозаполняет описание
 // и оба поля по теме; дата формирования ставится на бэкенде.
+//
+// @Summary      Публикация черновика
+// @Description  черновик → опубликован, дозаполняет описание и два поля по теме; formed_at ставит бэкенд. Гость — 401, не создатель — 403.
+// @Tags         Услуги — виды топлива
+// @Accept       json
+// @Produce      json
+// @Param        fuel_id  path      int                             true   "Ид вида топлива"
+// @Param        body     body      serializers.PublishFuelRequest  false  "Поля карточки (необязательные)"
+// @Success      200      {object}  serializers.FuelDetail
+// @Failure      400      {object}  serializers.ErrorResponse
+// @Failure      401      {object}  serializers.ErrorResponse
+// @Failure      403      {object}  serializers.ErrorResponse
+// @Failure      404      {object}  serializers.ErrorResponse
+// @Failure      409      {object}  serializers.ErrorResponse
+// @Security     BearerAuth
+// @Router       /fuels/{fuel_id}/publish [put]
 func (h *FuelAPIHandler) PublishFuel(ctx *gin.Context) {
 	fuel, ok := h.ownActiveFuel(ctx)
 	if !ok {
@@ -385,7 +475,7 @@ func (h *FuelAPIHandler) PublishFuel(ctx *gin.Context) {
 		return
 	}
 
-	h.logger.Infof("api: карточка %d опубликована пользователем %d", fuel.FuelID, auth.CurrentUserID())
+	h.logger.Infof("api: карточка %d опубликована пользователем %d", fuel.FuelID, currentUserID(ctx))
 
 	published, err := h.repository.GetActiveFuel(fuel.FuelID)
 	if err != nil {
@@ -401,6 +491,18 @@ func (h *FuelAPIHandler) PublishFuel(ctx *gin.Context) {
 // Только логическое удаление (soft delete): статус меняется на «удален»
 // через ORM, строка остаётся в базе. Удалённая карточка больше не
 // отдаётся ни одним методом, поэтому в ответе только её ид.
+//
+// @Summary      Удаление вида топлива (логическое)
+// @Description  Статус → удален, строка остаётся в БД. Только создатель карточки.
+// @Tags         Услуги — виды топлива
+// @Produce      json
+// @Param        fuel_id  path      int  true  "Ид вида топлива"
+// @Success      200      {object}  serializers.DeleteFuelResponse
+// @Failure      401      {object}  serializers.ErrorResponse
+// @Failure      403      {object}  serializers.ErrorResponse
+// @Failure      404      {object}  serializers.ErrorResponse
+// @Security     BearerAuth
+// @Router       /fuels/{fuel_id} [delete]
 func (h *FuelAPIHandler) DeleteFuel(ctx *gin.Context) {
 	fuel, ok := h.ownActiveFuel(ctx)
 	if !ok {
@@ -434,6 +536,20 @@ func (h *FuelAPIHandler) DeleteFuel(ctx *gin.Context) {
 //
 // Лайк от текущего пользователя: 1 ставит, 0 отменяет. Повторный вызов
 // с тем же значением ничего не меняет. Лайкнуть можно только опубликованную карточку.
+//
+// @Summary      Лайк
+// @Description  1 — поставить лайк от пользователя из JWT, 0 — отменить. Только опубликованные карточки.
+// @Tags         Услуги — виды топлива
+// @Accept       json
+// @Produce      json
+// @Param        fuel_id  path      int                      true  "Ид вида топлива"
+// @Param        body     body      serializers.LikeRequest  true  "like: 1 или 0"
+// @Success      200      {object}  serializers.LikeResponse
+// @Failure      400      {object}  serializers.ErrorResponse
+// @Failure      401      {object}  serializers.ErrorResponse
+// @Failure      404      {object}  serializers.ErrorResponse
+// @Security     BearerAuth
+// @Router       /fuels/{fuel_id}/like [post]
 func (h *FuelAPIHandler) LikeFuel(ctx *gin.Context) {
 	fuelID, ok := parseFuelID(ctx)
 	if !ok {
@@ -461,7 +577,7 @@ func (h *FuelAPIHandler) LikeFuel(ctx *gin.Context) {
 		return
 	}
 
-	userID := auth.CurrentUserID()
+	userID := currentUserID(ctx)
 	if *request.Like == 1 {
 		err = h.repository.AddLike(userID, fuel.FuelID)
 	} else {

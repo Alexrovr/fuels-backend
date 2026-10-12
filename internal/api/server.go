@@ -1,12 +1,18 @@
 package api
 
 import (
+	"context"
 	"net/http"
 	"os"
 
 	"github.com/gin-gonic/gin"
 	"github.com/sirupsen/logrus"
+	swaggerFiles "github.com/swaggo/files"
+	ginSwagger "github.com/swaggo/gin-swagger"
 
+	_ "heat-backend/docs/swagger" // сгенерированное описание API (swag init)
+	"heat-backend/internal/app/auth"
+	"heat-backend/internal/app/config"
 	"heat-backend/internal/app/handler"
 	"heat-backend/internal/app/repository"
 	"heat-backend/internal/app/storage"
@@ -25,10 +31,22 @@ func StartServer(logger *logrus.Logger) error {
 		return err
 	}
 
+	cfg, err := config.FromEnv()
+	if err != nil {
+		return err
+	}
+	blacklist, err := auth.NewBlacklist(context.Background(), cfg.Redis)
+	if err != nil {
+		return err
+	}
+	defer blacklist.Close()
+	tokens := auth.NewTokenManager(cfg.JWT)
+
 	mediaResolver := storage.NewMediaResolver()
 	fuelHandler := handler.NewFuelHandler(fuelRepository, mediaResolver, logger)
 	fuelAPIHandler := handler.NewFuelAPIHandler(fuelRepository, minioStorage, logger)
-	userAPIHandler := handler.NewUserAPIHandler(userRepository, logger)
+	userAPIHandler := handler.NewUserAPIHandler(userRepository, tokens, blacklist, logger)
+	authMiddleware := handler.NewAuthMiddleware(tokens, blacklist, logger)
 
 	router := gin.Default()
 
@@ -53,35 +71,47 @@ func StartServer(logger *logrus.Logger) error {
 		ctx.Redirect(http.StatusFound, "/fuel_grid")
 	})
 
-	// --- Веб-сервис для SPA (ЛР3), JSON --- //
+	// --- Веб-сервис для SPA (ЛР3–ЛР4), JSON --- //
 
-	registerAPI(router.Group("/api"), fuelAPIHandler, userAPIHandler)
+	registerAPI(router.Group("/api"), fuelAPIHandler, userAPIHandler, authMiddleware)
+
+	// Swagger UI: http://localhost:3030/swagger/index.html
+	router.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 
 	port := os.Getenv("APP_PORT")
 	if port == "" {
 		port = "3030"
 	}
 
-	logger.Infof("сервер расчёта теплоты сгорания запущен на http://localhost:%s", port)
+	logger.Infof("сервер расчёта теплоты сгорания запущен на http://localhost:%s, swagger — /swagger/index.html", port)
 	return router.Run(":" + port)
 }
 
 // registerAPI — десять методов веб-сервиса в двух доменах.
-func registerAPI(api *gin.RouterGroup, fuels handler.FuelDomain, users handler.UserDomain) {
+//
+// Доступ (ЛР4): гость — только чтение (список, лента), регистрация и вход;
+// методы создателя требуют JWT — без него 401, чужая карточка — 403.
+func registerAPI(api *gin.RouterGroup, fuels handler.FuelDomain, users handler.UserDomain, auth *handler.AuthMiddleware) {
 	// Домен услуги: /api/fuels
 	fuelGroup := api.Group("/fuels")
-	fuelGroup.GET("", fuels.GetFuels)                     // список с фильтром ?min_heat=
-	fuelGroup.GET("/feed", fuels.GetFuelFeed)             // лента без ид
-	fuelGroup.GET("/feed/:fuel_id", fuels.GetFuelFeed)    // лента по ид, ?next=true
-	fuelGroup.GET("/draft", fuels.GetFuelDraft)           // черновик текущего пользователя
-	fuelGroup.POST("", fuels.CreateFuel)                  // добавление + изображение и видео
-	fuelGroup.PUT("/:fuel_id/publish", fuels.PublishFuel) // черновик -> опубликован
-	fuelGroup.DELETE("/:fuel_id", fuels.DeleteFuel)       // soft delete
-	fuelGroup.POST("/:fuel_id/like", fuels.LikeFuel)      // like: 1 / 0
+
+	// Чтение — гостю и пользователю; с токеном дополнительно is_liked / is_mine.
+	public := fuelGroup.Group("", auth.OptionalAuth())
+	public.GET("", fuels.GetFuels)                  // список с фильтром ?min_heat=
+	public.GET("/feed", fuels.GetFuelFeed)          // лента без ид
+	public.GET("/feed/:fuel_id", fuels.GetFuelFeed) // лента по ид, ?next=true
+
+	// Методы создателя — только с JWT; создатель берётся из токена.
+	creator := fuelGroup.Group("", auth.RequireAuth())
+	creator.GET("/draft", fuels.GetFuelDraft)           // черновик текущего пользователя
+	creator.POST("", fuels.CreateFuel)                  // добавление + изображение и видео
+	creator.PUT("/:fuel_id/publish", fuels.PublishFuel) // черновик -> опубликован
+	creator.DELETE("/:fuel_id", fuels.DeleteFuel)       // soft delete
+	creator.POST("/:fuel_id/like", fuels.LikeFuel)      // like: 1 / 0
 
 	// Домен пользователя: /api/users
 	userGroup := api.Group("/users")
 	userGroup.POST("/register", users.Register)
-	userGroup.POST("/login", users.Login)   // заглушка до ЛР4
-	userGroup.POST("/logout", users.Logout) // заглушка до ЛР4
+	userGroup.POST("/login", users.Login)                       // выдаёт JWT
+	userGroup.POST("/logout", auth.RequireAuth(), users.Logout) // JWT -> чёрный список Redis
 }

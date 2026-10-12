@@ -65,6 +65,23 @@ services:
       mc ls heat/heat-fuel-media;
       "
 
+  # Хранилище чёрного списка JWT (ЛР4): токены, отозванные методом logout,
+  # лежат здесь до истечения срока действия.
+  heat-redis:
+    image: redis:7.4-alpine
+    container_name: heat-redis
+    command: redis-server --requirepass ${REDIS_PASSWORD:-heat}
+    ports:
+      - "6379:6379"
+    volumes:
+      - heat-redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-heat}", "--no-auth-warning", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
 volumes:
   heat-minio-data:
   heat-postgres-data:
+  heat-redis-data:
