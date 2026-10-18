@@ -22,7 +22,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Опубликованные карточки с фильтром по нижней границе теплоты сгорания. Доступно гостю без токена; токен необязателен — с ним дополнительно заполняется is_liked.",
+                "description": "Опубликованные карточки с фильтром по нижней границе теплоты сгорания. Доступно гостю без токена; токен необязателен — с ним дополнительно заполняется is_mine.",
                 "produces": [
                     "application/json"
                 ],
@@ -175,7 +175,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Первая опубликованная карточка. Доступно гостю без токена; токен необязателен — с ним заполняются is_liked и is_mine.",
+                "description": "Первая опубликованная карточка. Доступно гостю без токена; токен необязателен — с ним дополнительно заполняется is_liked.",
                 "produces": [
                     "application/json"
                 ],
@@ -206,7 +206,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "С next=true — следующая опубликованная после fuel_id (по кругу). Доступно гостю без токена; токен необязателен — с ним заполняются is_liked и is_mine.",
+                "description": "С next=true — следующая опубликованная после fuel_id (по кругу). Доступно гостю без токена; токен необязателен — с ним дополнительно заполняется is_liked.",
                 "produces": [
                     "application/json"
                 ],
@@ -612,7 +612,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "creator_login": {
-                    "description": "CreatorLogin — логин автора плоским полем: вложенный объект пользователя\nклиенту не нужен, а «своя ли карточка» передаёт IsMine",
+                    "description": "CreatorLogin — логин автора плоским полем: вложенный объект пользователя\nклиенту не нужен",
                     "type": "string"
                 },
                 "formed_at": {
@@ -637,10 +637,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "is_liked": {
-                    "type": "boolean"
-                },
-                "is_mine": {
-                    "description": "IsMine — карточку создал текущий пользователь",
+                    "description": "IsLiked — текущий пользователь лайкнул карточку: в ленте по нему\nзакрашивается сердечко",
                     "type": "boolean"
                 },
                 "likes_count": {
@@ -669,7 +666,8 @@ const docTemplate = `{
                 "image_url": {
                     "type": "string"
                 },
-                "is_liked": {
+                "is_mine": {
+                    "description": "IsMine — карточку создал текущий пользователь: в плитке по нему\nпоказывается кнопка удаления",
                     "type": "boolean"
                 },
                 "likes_count": {

@@ -79,23 +79,3 @@ func (r *FuelRepository) IsLikedBy(userID, fuelID uint) (bool, error) {
 		Count(&count).Error
 	return count > 0, err
 }
-
-// LikedFuelIDs возвращает, какие из карточек списка лайкнул пользователь.
-func (r *FuelRepository) LikedFuelIDs(userID uint, fuelIDs []uint) (map[uint]bool, error) {
-	liked := make(map[uint]bool, len(fuelIDs))
-	if len(fuelIDs) == 0 {
-		return liked, nil
-	}
-
-	var ids []uint
-	err := r.db.Model(&models.FuelLike{}).
-		Where("user_id = ? AND fuel_id IN ?", userID, fuelIDs).
-		Pluck("fuel_id", &ids).Error
-	if err != nil {
-		return nil, err
-	}
-	for _, id := range ids {
-		liked[id] = true
-	}
-	return liked, nil
-}

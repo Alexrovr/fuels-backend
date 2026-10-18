@@ -141,21 +141,21 @@ video      file  обязательно, mp4/webm, ≤ 30 МБ
 
 ```text
 FuelListItem  { fuel_id: uint, fuel_name: string, heat_of_combustion_kj: int, ignition_temp_c: int,
-                image_url: string, likes_count: int, is_liked: bool }
+                image_url: string, likes_count: int, is_mine: bool }
 
 FuelDetail    { fuel_id: uint, fuel_name: string, combustion_note: string,
                 fuel_status: "черновик" | "опубликован",
                 heat_of_combustion_kj: int, ignition_temp_c: int,
                 image_url: string, video_url: string,
                 created_at: RFC3339, formed_at: RFC3339 | null,
-                creator_login: string, likes_count: int, is_liked: bool, is_mine: bool }
+                creator_login: string, likes_count: int, is_liked: bool }
 
 LikeResponse  { fuel_id: uint, is_liked: bool, likes_count: int }
 
 UserShort     { user_id: uint, login: string, full_name: string }
 ```
 
-- `is_liked` — поставил ли лайк текущий пользователь; `likes_count` — `count(*)` по `fuel_likes`.
+- `is_liked` (лента и черновик) — поставил ли лайк текущий пользователь; `likes_count` — `count(*)` по `fuel_likes`.
 - `creator_login` — логин автора карточки, плоским полем (без вложенного объекта пользователя).
-- `is_mine` — карточку создал текущий пользователь (`creator_id` = id из JWT); у гостя `is_liked` и `is_mine` всегда `false`.
+- `is_mine` (плитка) — карточку создал текущий пользователь (`creator_id` = id из JWT), по нему показывается «Удалить»; у гостя `is_liked` и `is_mine` всегда `false`.
 - Медиа по умолчанию (`/resources/media/...`) отдаются полным url этого сервера.

@@ -23,7 +23,9 @@ type FuelListItem struct {
 	IgnitionTempC      int    `json:"ignition_temp_c"`
 	ImageURL           string `json:"image_url"`
 	LikesCount         int    `json:"likes_count"`
-	IsLiked            bool   `json:"is_liked"`
+	// IsMine — карточку создал текущий пользователь: в плитке по нему
+	// показывается кнопка удаления
+	IsMine bool `json:"is_mine"`
 }
 
 type FuelDetail struct {
@@ -41,13 +43,13 @@ type FuelDetail struct {
 	CreatedAt time.Time  `json:"created_at"`
 	FormedAt  *time.Time `json:"formed_at"`
 	// CreatorLogin — логин автора плоским полем: вложенный объект пользователя
-	// клиенту не нужен, а «своя ли карточка» передаёт IsMine
+	// клиенту не нужен
 	CreatorLogin string `json:"creator_login"`
 
-	LikesCount int  `json:"likes_count"`
-	IsLiked    bool `json:"is_liked"`
-	// IsMine — карточку создал текущий пользователь
-	IsMine bool `json:"is_mine"`
+	LikesCount int `json:"likes_count"`
+	// IsLiked — текущий пользователь лайкнул карточку: в ленте по нему
+	// закрашивается сердечко
+	IsLiked bool `json:"is_liked"`
 }
 
 // LikeResponse — состояние лайка после POST /api/fuels/:fuel_id/like.
@@ -60,7 +62,7 @@ type LikeResponse struct {
 // MediaURL приводит url медиа к виду, пригодному для клиента.
 type MediaURL func(raw string) string
 
-func NewFuelListItem(fuel models.Fuel, likesCount int, liked bool, media MediaURL) FuelListItem {
+func NewFuelListItem(fuel models.Fuel, likesCount int, isMine bool, media MediaURL) FuelListItem {
 	return FuelListItem{
 		FuelID:             fuel.FuelID,
 		FuelName:           fuel.FuelName,
@@ -68,12 +70,12 @@ func NewFuelListItem(fuel models.Fuel, likesCount int, liked bool, media MediaUR
 		IgnitionTempC:      fuel.IgnitionTempC,
 		ImageURL:           media(fuel.ImageURL),
 		LikesCount:         likesCount,
-		IsLiked:            liked,
+		IsMine:             isMine,
 	}
 }
 
 // NewFuelDetail собирает полную карточку. fuel.Creator должен быть загружен (Preload).
-func NewFuelDetail(fuel models.Fuel, likesCount int, liked, isMine bool, media MediaURL) FuelDetail {
+func NewFuelDetail(fuel models.Fuel, likesCount int, liked bool, media MediaURL) FuelDetail {
 	return FuelDetail{
 		FuelID:             fuel.FuelID,
 		FuelName:           fuel.FuelName,
@@ -88,7 +90,6 @@ func NewFuelDetail(fuel models.Fuel, likesCount int, liked, isMine bool, media M
 		CreatorLogin:       fuel.Creator.Login,
 		LikesCount:         likesCount,
 		IsLiked:            liked,
-		IsMine:             isMine,
 	}
 }
 

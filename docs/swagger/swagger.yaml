@@ -34,7 +34,7 @@ definitions:
       creator_login:
         description: |-
           CreatorLogin — логин автора плоским полем: вложенный объект пользователя
-          клиенту не нужен, а «своя ли карточка» передаёт IsMine
+          клиенту не нужен
         type: string
       formed_at:
         type: string
@@ -51,9 +51,9 @@ definitions:
       image_url:
         type: string
       is_liked:
-        type: boolean
-      is_mine:
-        description: IsMine — карточку создал текущий пользователь
+        description: |-
+          IsLiked — текущий пользователь лайкнул карточку: в ленте по нему
+          закрашивается сердечко
         type: boolean
       likes_count:
         type: integer
@@ -72,7 +72,10 @@ definitions:
         type: integer
       image_url:
         type: string
-      is_liked:
+      is_mine:
+        description: |-
+          IsMine — карточку создал текущий пользователь: в плитке по нему
+          показывается кнопка удаления
         type: boolean
       likes_count:
         type: integer
@@ -175,7 +178,7 @@ paths:
     get:
       description: Опубликованные карточки с фильтром по нижней границе теплоты сгорания.
         Доступно гостю без токена; токен необязателен — с ним дополнительно заполняется
-        is_liked.
+        is_mine.
       parameters:
       - description: Теплота сгорания не меньше, кДж/м³
         in: query
@@ -399,7 +402,7 @@ paths:
   /fuels/feed:
     get:
       description: Первая опубликованная карточка. Доступно гостю без токена; токен
-        необязателен — с ним заполняются is_liked и is_mine.
+        необязателен — с ним дополнительно заполняется is_liked.
       produces:
       - application/json
       responses:
@@ -419,8 +422,8 @@ paths:
   /fuels/feed/{fuel_id}:
     get:
       description: С next=true — следующая опубликованная после fuel_id (по кругу).
-        Доступно гостю без токена; токен необязателен — с ним заполняются is_liked
-        и is_mine.
+        Доступно гостю без токена; токен необязателен — с ним дополнительно заполняется
+        is_liked.
       parameters:
       - description: Ид вида топлива
         in: path

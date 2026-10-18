@@ -203,7 +203,7 @@ Swagger: <http://localhost:3030/swagger/index.html>.
 * **Middleware** ([auth_middleware.go](internal/app/handler/auth_middleware.go)):
   `RequireAuth` — методы создателя, нет токена / неверная подпись / просрочен / в чёрном списке → `401`;
   `OptionalAuth` — чтение (список, лента): гость получает данные как обычно, а с токеном
-  дополнительно заполняются `is_liked` / `is_mine`; неверный токен здесь не ошибка.
+  дополнительно заполняются `is_mine` (список) / `is_liked` (лента); неверный токен здесь не ошибка.
   Чужая карточка при публикации и удалении → `403`.
 * **Выход** `POST /api/users/logout` кладёт токен в Redis:
   ключ `heat_fuels.jwt.<jti>` — хэш `{user_id, login, logout_at}` с TTL = остаток срока

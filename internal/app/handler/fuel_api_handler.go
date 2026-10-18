@@ -47,8 +47,8 @@ func NewFuelAPIHandler(
 	}
 }
 
-// fuelDetail добавляет к карточке число лайков и отметки «лайкнул текущий пользователь»
-// и «карточку создал текущий пользователь». У гостя обе отметки false.
+// fuelDetail добавляет к карточке число лайков и отметку «лайкнул текущий пользователь».
+// У гостя отметка false.
 func (h *FuelAPIHandler) fuelDetail(ctx *gin.Context, fuel models.Fuel) (serializers.FuelDetail, error) {
 	likesCount, err := h.repository.LikesCount(fuel.FuelID)
 	if err != nil {
@@ -61,8 +61,7 @@ func (h *FuelAPIHandler) fuelDetail(ctx *gin.Context, fuel models.Fuel) (seriali
 			return serializers.FuelDetail{}, err
 		}
 	}
-	isMine := userID != 0 && fuel.CreatorID == userID
-	return serializers.NewFuelDetail(fuel, likesCount, liked, isMine, absoluteMediaURL(ctx)), nil
+	return serializers.NewFuelDetail(fuel, likesCount, liked, absoluteMediaURL(ctx)), nil
 }
 
 func (h *FuelAPIHandler) respondFuel(ctx *gin.Context, status int, fuel models.Fuel) {
@@ -81,7 +80,7 @@ func (h *FuelAPIHandler) respondFuel(ctx *gin.Context, status int, fuel models.F
 // теплоты сгорания (как слайдер в ЛР1). Черновики и удалённые не попадают.
 //
 // @Summary      Список видов топлива (плитка)
-// @Description  Опубликованные карточки с фильтром по нижней границе теплоты сгорания. Доступно гостю без токена; токен необязателен — с ним дополнительно заполняется is_liked.
+// @Description  Опубликованные карточки с фильтром по нижней границе теплоты сгорания. Доступно гостю без токена; токен необязателен — с ним дополнительно заполняется is_mine.
 // @Tags         Услуги — виды топлива
 // @Produce      json
 // @Param        min_heat  query     int  false  "Теплота сгорания не меньше, кДж/м³"  minimum(0)
@@ -117,20 +116,13 @@ func (h *FuelAPIHandler) GetFuels(ctx *gin.Context) {
 		respondError(ctx, http.StatusInternalServerError, "Не удалось посчитать лайки")
 		return
 	}
-	likedByMe := map[uint]bool{} // у гостя лайков нет
-	if userID := currentUserID(ctx); userID != 0 {
-		likedByMe, err = h.repository.LikedFuelIDs(userID, fuelIDs)
-		if err != nil {
-			h.logger.Errorf("api: лайки пользователя: %v", err)
-			respondError(ctx, http.StatusInternalServerError, "Не удалось посчитать лайки")
-			return
-		}
-	}
+	userID := currentUserID(ctx) // у гостя 0: своих карточек нет
 
 	items := make([]serializers.FuelListItem, 0, len(fuels))
 	for _, fuel := range fuels {
+		isMine := userID != 0 && fuel.CreatorID == userID
 		items = append(items, serializers.NewFuelListItem(
-			fuel, likesByFuel[fuel.FuelID], likedByMe[fuel.FuelID], absoluteMediaURL(ctx)))
+			fuel, likesByFuel[fuel.FuelID], isMine, absoluteMediaURL(ctx)))
 	}
 	ctx.JSON(http.StatusOK, items)
 }
@@ -176,14 +168,14 @@ func (h *FuelAPIHandler) GetFuelFeed(ctx *gin.Context) {
 }
 
 // У методов чтения @Security объявлен тоже: Swagger UI подставляет заголовок Authorization
-// только в методы со схемой безопасности, иначе после Authorize is_liked / is_mine
-// в Swagger всегда false. Токен для них необязателен (OptionalAuth), гость получает 200.
+// только в методы со схемой безопасности, иначе после Authorize is_mine (список)
+// и is_liked (лента) в Swagger всегда false. Токен для них необязателен (OptionalAuth), гость получает 200.
 //
 // swaggerFeedFirst и swaggerFeedByID — только описание двух url ленты для Swagger
 // (swag берёт аннотации у объявления функции); обработчик у обоих — GetFuelFeed.
 //
 // @Summary      Лента: первая карточка
-// @Description  Первая опубликованная карточка. Доступно гостю без токена; токен необязателен — с ним заполняются is_liked и is_mine.
+// @Description  Первая опубликованная карточка. Доступно гостю без токена; токен необязателен — с ним дополнительно заполняется is_liked.
 // @Tags         Услуги — виды топлива
 // @Produce      json
 // @Success      200  {object}  serializers.FuelDetail
@@ -193,7 +185,7 @@ func (h *FuelAPIHandler) GetFuelFeed(ctx *gin.Context) {
 func swaggerFeedFirst() {}
 
 // @Summary      Лента: карточка по ид или следующая за ней
-// @Description  С next=true — следующая опубликованная после fuel_id (по кругу). Доступно гостю без токена; токен необязателен — с ним заполняются is_liked и is_mine.
+// @Description  С next=true — следующая опубликованная после fuel_id (по кругу). Доступно гостю без токена; токен необязателен — с ним дополнительно заполняется is_liked.
 // @Tags         Услуги — виды топлива
 // @Produce      json
 // @Param        fuel_id  path      int     true   "Ид вида топлива"
